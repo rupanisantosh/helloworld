@@ -2,7 +2,7 @@
 echo "==================== Generic Information about the Application [START] ==============================================="
 // GIT Repository
 def gitURL 		= '${GIT_Repo}'
-def git_Branch 	= '${GIT_Branch}'
+def git_Branch 	= "${GIT_Branch}"
 def tarName  = '${TAR_Name}'
 println git_Branch
 echo  "			Application GIT Repo: ${GIT_Repo}"
