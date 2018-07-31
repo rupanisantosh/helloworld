@@ -20,7 +20,7 @@ pipeline{
 			  x.add[(b)]
                     }
 			}
-            }
+			}}
        
 		stage ('Build and Publish'){
 			steps{
