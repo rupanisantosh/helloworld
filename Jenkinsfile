@@ -14,14 +14,14 @@ pipeline{
        stage('Code Checkout') {	
 			steps{
 			script {
-		    def x = git_Branch
-                    println x 
-                    for(String item: x) {
-                        println item
+		    def x = []
+		  for(b in git_branch) {
+                        println b
+			  x.add[(b)]
                     }
 			}
             }
-       }
+       
 		stage ('Build and Publish'){
 			steps{
             
