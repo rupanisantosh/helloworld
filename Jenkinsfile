@@ -13,8 +13,11 @@ pipeline{
     stages { 
        stage('Code Checkout') {	
 			steps{
-			echo_all(git_Branch)
-				
+			def branch = ['x' 'y', 'z']
+				println branch
+				for(String item: branch) {
+                        println item
+				}
 			}
             }
 		stage ('Build and Publish'){
@@ -28,9 +31,3 @@ pipeline{
     }
 }         
 
-def echo_all(list) {
-    sh "echo Going to echo a list"
-    for (int i = 0; i < list.size(); i++) {
-        sh "echo Hello ${list[i]}"
-    }
-}
