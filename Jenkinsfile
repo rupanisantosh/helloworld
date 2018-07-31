@@ -13,7 +13,10 @@ pipeline{
     stages { 
        stage('Code Checkout') {	
 			steps{
-            	  	sh "for i in ${git_Branch}; do git clone -n $i ${gitURL}; done"
+				for ( i in ${git_Branch}) {
+					echo i
+				}
+				
 			}
             }
 		stage ('Build and Publish'){
