@@ -13,7 +13,7 @@ pipeline{
     stages { 
        stage('Code Checkout') {	
 			steps{
-			def branch = ['x' 'y', 'z']
+			def branch = ['x', 'y', 'z']
 				println branch
 				for(String item: branch) {
                         println item
