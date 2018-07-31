@@ -14,7 +14,7 @@ pipeline{
        stage('Code Checkout') {	
 			steps{
 			script {
-                    def x = ['a', 'b', 'c']
+				def x = ${git_Branch}
                     println x 
                     for(String item: x) {
                         println item
