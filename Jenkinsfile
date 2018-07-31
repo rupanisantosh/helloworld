@@ -14,8 +14,8 @@ pipeline{
        stage('Code Checkout') {	
 			steps{
             	  	deleteDir()						
-			git branch: "${git_Branch}",  url: "${gitURL}"
-                         stash includes: '**', name: 'workspace'
+			//git branch: "${git_Branch}",  url: "${gitURL}"
+                         //stash includes: '**', name: 'workspace'
 			echo_all(git_Branch)
 		}
             }
@@ -33,5 +33,7 @@ pipeline{
 def echo_all(list) {
     list.each { item ->
         echo "Hello ${item}"
+	    git branch: "${git_Branch}",  url: "${gitURL}"
+            stash includes: '**', name: 'workspace'
     }
 }
