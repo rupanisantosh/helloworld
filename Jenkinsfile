@@ -13,10 +13,11 @@ pipeline{
     stages { 
        stage('Code Checkout') {	
 			steps{
-            	  	deleteDir()						
+            	  	deleteDir()	
+		sh "for i in "${git_Branch}"; do git clone -n $i "${gitURL}"; done
 			//git branch: "${git_Branch}",  url: "${gitURL}"
                          //stash includes: '**', name: 'workspace'
-			echo_all(git_Branch)
+			
 		}
             }
 		stage ('Build and Publish'){
@@ -33,7 +34,6 @@ pipeline{
 def echo_all(list) {
     list.each { item ->
         echo "Hello ${item}"
-	    git branch: "${git_Branch}",  url: "${gitURL}"
-            stash includes: '**', name: 'workspace'
-    }
+	  //  git branch: "${git_Branch}",  url: "${gitURL}"
+             }
 }
