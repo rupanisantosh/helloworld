@@ -13,12 +13,8 @@ pipeline{
     stages { 
        stage('Code Checkout') {	
 			steps{
-            	  	deleteDir()	
-		sh "for i in "${git_Branch}"; do git clone -n $i "${gitURL}"; done"
-			//git branch: "${git_Branch}",  url: "${gitURL}"
-                         //stash includes: '**', name: 'workspace'
-			
-		}
+            	  	sh "for i in ${git_Branch}; do git clone -n $i ${gitURL}; done"
+			}
             }
 		stage ('Build and Publish'){
 			steps{
