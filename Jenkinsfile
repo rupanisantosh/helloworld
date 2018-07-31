@@ -13,9 +13,7 @@ pipeline{
     stages { 
        stage('Code Checkout') {	
 			steps{
-				for ( i in ${git_Branch}) {
-					echo i
-				}
+			echo_all(git_Branch)
 				
 			}
             }
