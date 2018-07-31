@@ -13,11 +13,12 @@ pipeline{
     stages { 
        stage('Code Checkout') {	
 			steps{
-			def branch = ['x', 'y', 'z']
-				println branch
-				for(String item: branch) {
+			script {
+                    def x = ['a', 'b', 'c']
+                    println x 
+                    for(String item: x) {
                         println item
-				}
+                    }
 			}
             }
 		stage ('Build and Publish'){
