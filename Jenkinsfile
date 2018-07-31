@@ -21,6 +21,7 @@ pipeline{
                     }
 			}
             }
+       }
 		stage ('Build and Publish'){
 			steps{
             
@@ -31,5 +32,3 @@ pipeline{
     }
     }
 }         
-
-}
