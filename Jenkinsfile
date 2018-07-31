@@ -29,8 +29,8 @@ pipeline{
 }         
 
 def echo_all(list) {
-    list.each { item ->
-        echo "Hello ${item}"
-	  //  git branch: "${git_Branch}",  url: "${gitURL}"
-             }
+    sh "echo Going to echo a list"
+    for (int i = 0; i < list.size(); i++) {
+        sh "echo Hello ${list[i]}"
+    }
 }
