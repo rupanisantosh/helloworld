@@ -19,7 +19,7 @@ node {
     sh '''
     ls -l $WORKSPACE/target
    
-    rm -rf /usr/share/tomcat/webapps/*.war
+    sudo  rm -rf /usr/share/tomcat/webapps/*.war
     sudo cp  $WORKSPACE/target/*.war /usr/share/tomcat/webapps/
     
     '''
