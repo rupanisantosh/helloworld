@@ -12,6 +12,14 @@ pipeline {
                 echo 'Testing..'
             }
         }
+        stage('configuration') {
+            steps {
+                sh '''
+                cd $WORKSPACE
+                anisble-playbook -i hosts apache.yaml
+                '''
+            }
+        }
         stage('Deploy') {
             steps {
                 echo 'Deploying....'
