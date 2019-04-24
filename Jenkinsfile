@@ -1,4 +1,4 @@
-pipeline(useTemplate: 'PipelineTemplate') {
+pipeline{
     agent any
 
     stages {
