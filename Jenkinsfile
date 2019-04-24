@@ -1,8 +1,10 @@
-pipeline {
+pipeline (useTemplate: 'PipelineTemplate') {
     agent any
 
     stages {
-        stage('Build') {
+        stage('Build') // no closure
+        stage('Staging Deploy')
+        stage('Build1') {
             steps {
                 echo 'Building..'
             }
@@ -21,6 +23,7 @@ pipeline {
             steps {
                 echo 'Deploying....'
             }
-        }
+         }
+        stage('Production Deploy')
     }
 }
