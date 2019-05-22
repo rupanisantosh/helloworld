@@ -1,0 +1,3105 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Template to create an ECS cluster
+Mappings:
+  EcsNodeAmiMap:
+    us-east-2:
+      AmiId: ami-0a0d2004b44b9287c
+    us-east-1:
+      AmiId: ami-0254e5972ebcd132c
+    us-west-2:
+      AmiId: ami-093381d21a4fc38d1
+    us-west-1:
+      AmiId: ami-0de5608ca20c07aa2
+  EnvMap:
+    opstest:
+      ECSRESERVEDMEMORY: "757"
+      JVMHEAP: "384M"
+    dev:
+      ECSRESERVEDMEMORY: "757"
+      JVMHEAP: "384M"
+    qa:
+      ECSRESERVEDMEMORY: "757"
+      JVMHEAP: "384M"
+    uat:
+      ECSRESERVEDMEMORY: "757"
+      JVMHEAP: "384M"
+    load:
+      ECSRESERVEDMEMORY: "1514"
+      JVMHEAP: "768M"
+    stage:
+      ECSRESERVEDMEMORY: "757"
+      JVMHEAP: "384M"
+    prod:
+      ECSRESERVEDMEMORY: "1770"
+      JVMHEAP: "1024M"
+    uw2-1-dev1:
+      ECSRESERVEDMEMORY: '757'
+      JVMHEAP: 384M
+    ue1-1-prod1:
+      ECSRESERVEDMEMORY: '1770'
+      JVMHEAP: 1024M
+    uw2-1-load1:
+      ECSRESERVEDMEMORY: '1514'
+      JVMHEAP: 768M
+    uw2-1-qa1:
+      ECSRESERVEDMEMORY: '757'
+      JVMHEAP: 384M
+    uw2-1-uat1:
+      ECSRESERVEDMEMORY: '757'
+      JVMHEAP: 384M
+    ue1-1-stage1:
+      ECSRESERVEDMEMORY: '757'
+      JVMHEAP: 384M
+    uw2-1-opstest1:
+      ECSRESERVEDMEMORY: '757'
+      JVMHEAP: 384M
+  CommonMapping:
+    CommonMap:
+      ECRAccountNumber: '776609208984'
+      VolumeSize: '36'
+      VolumeType: gp2    
+
+Parameters:
+  ClusterName:
+    Type: String
+    Description: Name of the ECS cluster
+  ConsulVersion:
+    Type: String
+    Default: 1.4.4
+    Description: Consul version to run
+  ConsulEntRepo:
+    Type: String
+    Description: Repo where Consul Enterprise version is located
+    Default: 776609208984.dkr.ecr.us-west-2.amazonaws.com/dcg/consul-enterprise
+  RegistratorRepo:
+    Type: String
+    Description: Repo where Consul Enterprise version is located
+    Default: 776609208984.dkr.ecr.us-west-2.amazonaws.com/dcg/registrator
+  NginxLuaImageVersion:
+    Type: String
+    Description: version of nginx-lua docker image
+    Default: 1.13.12
+  NginxLuaRepo:
+    Type: String
+    Description: Repo where Consul Enterprise version is located
+    Default: 776609208984.dkr.ecr.us-west-2.amazonaws.com/dcg/nginx-lua
+  InfluxEndpoint:
+    Type: String
+    Description: InfluxDB Ip address or DNS name
+    Default: influxdb.admin.foxdcg.com
+  MinInstances:
+    Type: Number
+    Description: Minimum Number of ECS Servers
+    Default: '3'
+  MaxInstances:
+    Type: Number
+    Description: Maximum Number of ECS Servers
+    Default: '15'
+  MinScaleOut:
+    Type: Number
+    Description: Minimum Number of ECS Servers to add when scaling out
+    Default: '1'
+  PercentageScaleOut:
+    Type: Number
+    Description: Percent to scale out the ECS nodes
+    Default: '10'
+  ScalingCooldown:
+    Type: Number
+    Description: Amount of time to wait before another scaling activity should occur
+    Default: '75'
+  DesiredInstances:
+    Type: Number
+    Description: Desired Number of ECS Servers
+    Default: '4'
+  Network:
+    Type: String
+    Description: Name of Environment (dev, prod, etc)
+    Default: dev
+    AllowedValues:
+      - dev
+      - stage
+      - prod
+      - qa
+      - load
+      - opstest
+      - uat
+      - admin
+      - uw2-1-dev1
+      - ue1-1-prod1
+      - uw2-1-load1
+      - uw2-1-qa1
+      - uw2-1-uat1
+      - ue1-1-stage1
+      - uw2-1-opstest1
+  HostedZoneForLinkerdLB:
+    Type: String
+    Description: 'Name of the Hosted zone for Linkerd Loadbalance'
+    Default: uw2-1.dev1.api3.foxcpe.com.
+    AllowedValues:
+      - stage.api2.foxdcg.com
+      - prod.api2.foxdcg.com
+      - qa.api2.foxdcg.com
+      - load.api2.foxdcg.com
+      - opstest.api2.foxdcg.com
+      - uat.api2.foxdcg.com
+      - admin.api2.foxdcg.com
+      - ue1-1.prod1.api3.foxcpe.com.
+      - uw2-1.dev1.api3.foxcpe.com.
+      - uw2-1.load1.api3.foxcpe.com.
+      - uw2-1.qa1.api3.foxcpe.com.
+      - uw2-1.uat1.api3.foxcpe.com.
+      - ue1-1.stage1.api3.foxcpe.com.
+      - uw2-1.opstest1.api3.foxcpe.com.
+  RegistratorVersion:
+    Type: String
+    Description: Version of gliderlabs/registrator to use
+    Default: DCGv8
+  JaegerAgentVersion:
+    Type: String
+    Description: version of jaeger-agent docker image
+    Default: 1.11.0
+  DnsZone:
+    Description: Zone for Jaeger-Collector that the Jaeger-Agent connects to (jaeger.<zone>)
+    Type: String
+    AllowedValues:
+      - opstest.foxdcg.com
+      - dev.foxdcg.com
+      - qa.foxdcg.com
+      - stage.foxdcg.com
+      - load.foxdcg.com
+      - uat.foxdcg.com
+      - prod.foxdcg.com
+      - uw2-1.dev1.foxcpe.com
+      - ue1-1.prod1.foxcpe.com
+      - uw2-1.load1.foxcpe.com
+      - uw2-1.qa1.foxcpe.com
+      - ue1-1.stage1.foxcpe.com
+      - uw2-1.opstest1.foxcpe.com
+      - uw2-1.uat1.foxcpe.com
+  LinkerdZipkinVersion:
+    Type: String
+    Description: version of linkerd-zipkin docker image
+    Default: 1.6.2.1
+  LinkerdZipkinRepo:
+    Type: String
+    Description: Repo where Consul Enterprise version is located
+    Default: 776609208984.dkr.ecr.us-west-2.amazonaws.com/dcg/linkerd-zipkin
+  TracingSampleRate:
+    Type: Number
+    Description: Sample rate percentage 1.00 is 100%
+    Default: '1.00'
+  KeyName:
+    Type: String
+    Description: Key name to use
+  TelegrafVersion:
+    Type: String
+    Description: Version of telegraf to use
+    Default: 1.10.1
+  ConsulAgentToken:
+    Type: String
+    Description: Consul token for agent
+    NoEcho: 'true'
+  RegistratorToken:
+    Type: String
+    Description: Consul token for Registrator
+    NoEcho: 'true'
+  LinkerdInternalPort:
+    Type: Number
+    Description: Port number for internal linkerd communications
+    Default: '4140'
+  LinkerdInternetPort:
+    Type: Number
+    Description: Port number for connections from the internet to linkerd
+    Default: '4141'
+  LinkerdInternetTrustedPort:
+    Type: Number
+    Description: Port number for connections from the internet to linkerd
+    Default: '4142'
+  LinkerdExternalPort:
+    Type: Number
+    Description: Port number for linkerd connections to external resources
+    Default: '4150'
+  NewReliclicenseKey:
+    Description: >-
+      The New Relic Infrastructure license key associated with your New Relic
+      account.
+    Type: String
+    NoEcho: 'True'
+    AllowedPattern: .+
+  NlbInternetPort:
+    Type: Number
+    Description: Port for network loadbalancer for internet connections from API Gateway
+    Default: '4000'
+  NlbInternetTrustedPort:
+    Type: Number
+    Description: Port for network load balancer for trusted internet connections
+    Default: '4321'
+  ApiGatewayHeaderValue:
+    Type: String
+    Description: The value of the header to prove it's coming from API Gateway
+    Default: ''
+  EnableDetailedMonitoring:
+    Type: String
+    Description: Enable detailed monitoring for EC2 resources (true/false)
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  MemoryReservationHigh:
+    Type: Number
+    Description: The % of memory reservation above which we should scale out
+    Default: '60'
+  MemoryUtilizationHigh:
+    Type: Number
+    Description: the % of memory utilization above which we should scale out
+    Default: '60'
+  CPUReservationHigh:
+    Type: Number
+    Description: The % of cpu reservation above which we should scale out
+    Default: '60'
+  CPUUtilizationHigh:
+    Type: Number
+    Description: The % of cpu utilization above which we should scale out
+    Default: '60'
+  MemoryReservationLow:
+    Type: Number
+    Description: The % of memory reservation below which we should scale in.
+    Default: '30'
+  MemoryUtilizationLow:
+    Type: Number
+    Description: the % of memory utilization below which we should scale in.
+    Default: '30'
+  CPUReservationLow:
+    Type: Number
+    Description: The % of cpu reservation below which we should scale in.
+    Default: '30'
+  CPUUtilizationLow:
+    Type: Number
+    Description: The % of cpu utilization below which we should scale in.
+    Default: '30'
+  CreateLinkerdLoadBalancer:
+    Type: String
+    Description: true or false to create a load balancer for API gateway to talk to
+      linkerd
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  CreateLinkerdDevLoadBalancer:
+    Type: String
+    Description: true or false to create a load balancer for developers to use linkerd
+      from their laptop
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  SplunkToken:
+    Type: String
+    Description: Splunk token to use for HEC
+  SplunkEndpoint:
+    Type: String
+    Description: Hostname or IP address of splunk server to send logs
+    Default: https://injest.splunk.admin.foxdcg.com:8088
+  InstanceType:
+    Description: The EC2 instance type
+    Type: String
+    Default: t2.medium
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t3.medium
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c3.4xlarge
+      - c3.8xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.8xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - i2.xlarge
+      - i2.2xlarge
+      - i2.4xlarge
+      - i2.8xlarge
+      - d2.xlarge
+      - d2.2xlarge
+      - d2.4xlarge
+      - d2.8xlarge
+      - hi1.4xlarge
+      - hs1.8xlarge
+      - cr1.8xlarge
+      - m3.large
+      - cc2.8xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+  AsgNotificationSlackChannel:
+    Type: String
+    Description: Slack channel to send autoscaling notification to. Used by event
+      and metrics lambda functions.
+    Default: devops-asg-events
+  AsgNotificationSlackHookUrl:
+    Type: String
+    Description: Slack hook url to send autoscaling notification to. Used by event
+      and metrics lambda functions.
+    Default: https://hooks.slack.com/services/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
+  EnableScalingAlarmNotifications:
+    Type: String
+    Description: Enable alarms that trigger scaling actions to notify slack channel.
+      This setting does not affect notifications of scaling actions.
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  EnableScaleInPolicy:
+    Type: String
+    Description: true or false to enable scale in policy
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  EmptyInstanceScaleIn:
+    Type: String
+    Description: true or false to enable scale in from empty instance metric.
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  EmptyInstanceThreshold:
+    Type: Number
+    Description: Number of empty instances to allow in cluster before scale in is
+      triggered.
+    Default: '2'
+  SchedulableContainersScaleIn:
+    Type: String
+    Description: true or false to enable scale in from SchedulableContainers metric.
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  CombinedUtilResLowScaleIn:
+    Type: String
+    Description: true or false to enable scale in from CombinedUtilResLowScaleIn metric.
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  ContainerMaxCpu:
+    Type: Number
+    Description: Max cpu used by containers in cluster. Only used for autoscaling
+      calculations.
+    Default: '1024'
+  ContainerMaxMem:
+    Type: Number
+    Description: Max memory used by containers in cluster. Only used for autoscaling
+      calculations.
+    Default: '512'
+  SchedulableContainersThreshold:
+    Type: Number
+    Description: Threshold of schedulable containers before cluster scale in is triggered.
+    Default: '10'
+Conditions:
+  CreateLB: !Equals
+    - !Ref 'CreateLinkerdLoadBalancer'
+    - 'true'
+  DetailedMonitoring: !Equals
+    - !Ref 'EnableDetailedMonitoring'
+    - 'true'
+  ScalingAlarmNotifications: !Equals
+    - !Ref 'EnableScalingAlarmNotifications'
+    - 'true'
+  CreateDevLB: !Equals
+    - !Ref 'CreateLinkerdDevLoadBalancer'
+    - 'true'
+  CreateScaleInPolicy: !Equals
+    - !Ref 'EnableScaleInPolicy'
+    - 'true'
+  EnableEmptyInstanceScaleIn: !And
+    - !Equals
+      - !Ref 'EmptyInstanceScaleIn'
+      - 'true'
+    - !Equals
+      - !Ref 'EnableScaleInPolicy'
+      - 'true'
+  EnableSchedulableContainersScaleIn: !And
+    - !Equals
+      - !Ref 'SchedulableContainersScaleIn'
+      - 'true'
+    - !Equals
+      - !Ref 'EnableScaleInPolicy'
+      - 'true'
+  EnableCombinedUtilResLow: !And
+    - !Equals
+      - !Ref 'CombinedUtilResLowScaleIn'
+      - 'true'
+    - !Equals
+      - !Ref 'EnableScaleInPolicy'
+      - 'true'
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Cluster / EC2 / LB  Configuration
+        Parameters:
+          - ClusterName
+          - InstanceType
+          - MinInstances
+          - MaxInstances
+          - DesiredInstances
+          - Network
+          - HostedZoneForLinkerdLB
+          - DnsZone
+          - KeyName
+          - NlbInternetPort
+          - NlbInternetTrustedPort
+          - ApiGatewayHeaderValue
+          - EnableDetailedMonitoring
+          - CreateLinkerdLoadBalancer
+          - CreateLinkerdDevLoadBalancer
+      - Label:
+          default: Service Configuration
+        Parameters:
+          - ConsulVersion
+          - ConsulEntRepo
+          - RegistratorRepo
+          - NginxLuaImageVersion
+          - NginxLuaRepo
+          - InfluxEndpoint
+          - RegistratorVersion
+          - JaegerAgentVersion
+          - LinkerdZipkinVersion
+          - LinkerdZipkinRepo
+          - TelegrafVersion
+          - ConsulAgentToken
+          - NewReliclicenseKey
+          - RegistratorToken
+          - LinkerdInternalPort
+          - LinkerdInternetPort
+          - LinkerdInternetTrustedPort
+          - LinkerdExternalPort
+          - SplunkToken
+          - SplunkEndpoint
+      - Label:
+          default: AutoScaling Notification Configurations
+        Parameters:
+          - AsgNotificationSlackChannel
+          - AsgNotificationSlackHookUrl
+          - EnableScalingAlarmNotifications
+      - Label:
+          default: AutoScaling Scale In Configuration
+        Parameters:
+          - EnableScaleInPolicy
+          - EmptyInstanceScaleIn
+          - EmptyInstanceThreshold
+          - SchedulableContainersScaleIn
+          - ContainerMaxCpu
+          - ContainerMaxMem
+          - SchedulableContainersThreshold
+          - CombinedUtilResLowScaleIn
+          - MemoryReservationLow
+          - MemoryUtilizationLow
+          - CPUReservationLow
+          - CPUUtilizationLow
+      - Label:
+          default: AutoScaling Scale Out Configuration
+        Parameters:
+          - MinScaleOut
+          - PercentageScaleOut
+          - ScalingCooldown
+          - MemoryReservationHigh
+          - MemoryUtilizationHigh
+          - CPUReservationHigh
+          - CPUUtilizationHigh
+    ParameterLabels:
+      EnableScaleInPolicy:
+        default: Enable ScaleIn policy for the autoscaling cluster.
+Resources:
+  LinkerdAlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateLB
+    Properties:
+      GroupDescription: SG Allowing 0.0.0.0/0 to talk to the LB on port 4000 & 4321
+      VpcId: !GetAtt 'NetworkInfo.VpcId'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: !Ref 'NlbInternetPort'
+          ToPort: !Ref 'NlbInternetPort'
+      Tags:
+        - Key: Name
+          Value: Internet port 4000 & 4321 to LB
+  LinkerdAlb:
+    Condition: CreateLB
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Tags:
+        - Key: network
+          Value: !Ref 'Network'
+        - Key: Name
+          Value: linkerd-internet-gateway
+      Subnets:
+        - !GetAtt 'NetworkInfo.PublicSubnet1Id'
+        - !GetAtt 'NetworkInfo.PublicSubnet2Id'
+        - !GetAtt 'NetworkInfo.PublicSubnet3Id'
+      Type: network
+  LinkerdInternetTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: CreateLB
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /admin/ping
+      HealthCheckPort: !Ref 'NlbInternetPort'
+      HealthCheckProtocol: HTTP
+      HealthyThresholdCount: 2
+      Port: !Ref 'NlbInternetPort'
+      Protocol: TCP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '60'
+      Tags:
+        - Key: Name
+          Value: Linkerd-internet-gateway
+      UnhealthyThresholdCount: 2
+      VpcId: !GetAtt 'NetworkInfo.VpcId'
+  LinkerdAlbInternetListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: CreateLB
+    Properties:
+      Port: !Ref 'NlbInternetPort'
+      LoadBalancerArn: !Ref 'LinkerdAlb'
+      Protocol: TCP
+      DefaultActions:
+        - TargetGroupArn: !Ref 'LinkerdInternetTargetGroup'
+          Type: forward
+  LinkerdDevAlb:
+    Condition: CreateDevLB
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Join
+        - '-'
+        - - linkerd-int
+          - !Ref 'Network'
+          - gateway
+      Scheme: internal
+      Tags:
+        - Key: network
+          Value: !Ref 'Network'
+      SecurityGroups:
+        - !GetAtt 'NetworkInfo.SecurityGroupId'
+      Subnets:
+        - !GetAtt 'NetworkInfo.PrivateSubnet1Id'
+        - !GetAtt 'NetworkInfo.PrivateSubnet2Id'
+        - !GetAtt 'NetworkInfo.PrivateSubnet3Id'
+  LinkerdDevTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: CreateDevLB
+    Properties:
+      HealthCheckIntervalSeconds: 5
+      HealthCheckPath: /admin/ping
+      HealthCheckPort: '9990'
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 3
+      HealthyThresholdCount: 2
+      Port: !Ref 'LinkerdInternalPort'
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '30'
+      Tags:
+        - Key: Name
+          Value: Linkerd-internal-dev-gateway
+      UnhealthyThresholdCount: 2
+      VpcId: !GetAtt 'NetworkInfo.VpcId'
+  LinkerdDevAlbInternetListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: CreateDevLB
+    Properties:
+      Port: !Ref 'LinkerdInternalPort'
+      LoadBalancerArn: !Ref 'LinkerdDevAlb'
+      Protocol: HTTP
+      DefaultActions:
+        - TargetGroupArn: !Ref 'LinkerdDevTargetGroup'
+          Type: forward
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Join
+        - '-'
+        - - ECS
+          - !Ref 'Network'
+          - !Ref 'ClusterName'
+  NetworkInfo:
+    Type: Custom::NetworkInfo
+    Properties:
+      ServiceToken: !Join
+        - ''
+        - - 'arn:aws:lambda:'
+          - !Ref 'AWS::Region'
+          - ':'
+          - !Ref 'AWS::AccountId'
+          - :function:LookupStackOutputs
+      StackName: !Join
+        - '-'
+        - - vpc
+          - !Ref 'Network'
+  EcsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:CreateCluster
+                  - ecs:RegisterContainerInstance
+                  - ecs:DeregisterContainerInstance
+                  - ecs:DiscoverPollEndpoint
+                  - ecs:Submit*
+                  - ecs:Poll
+                  - ecs:StartTelemetrySession
+                  - ecs:StartTask
+                  - ec2:DescribeInstances
+                  - autoscaling:SetInstanceHealth
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - SNS:Publish
+                Resource: !ImportValue 'EcsAsgNotificationArn'
+        - PolicyName: ecr-ro-access
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:GetRepositoryPolicy
+                  - ecr:DescribeRepositories
+                  - ecr:ListImages
+                  - ecr:DescribeImages
+                  - ecr:BatchGetImage
+                Resource: '*'
+  EcsInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref 'EcsRole'
+  AsgStatusCheckFailed:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alarm for failed status checks in asg
+      AlarmActions:
+        - !Ref 'ECSMetricsAlarmTopic'
+      MetricName: StatusCheckFailed
+      Namespace: AWS/EC2
+      Statistic: Maximum
+      Period: '60'
+      EvaluationPeriods: '1'
+      Threshold: '0'
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref 'EcsAsg'
+  ASGEventsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !GetAtt 'EcsEventsNotifierLambda.Arn'
+          Protocol: lambda
+      TopicName: !Join
+        - '-'
+        - - ECS
+          - Events
+          - !Ref 'Network'
+          - !Ref 'ClusterName'
+  ECSMetricsAlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !GetAtt 'EcsMetricsNotifierLambda.Arn'
+          Protocol: lambda
+      TopicName: !Join
+        - '-'
+        - - ECS
+          - Metrics-Alarm
+          - !Ref 'Network'
+          - !Ref 'ClusterName'
+  EcsEventsNotifierLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      FunctionName: !Join
+        - '-'
+        - - EcsEventNotifier
+          - !Ref 'Network'
+          - !Ref 'ClusterName'
+      Environment:
+        Variables:
+          ECS_CLUSTER: !Ref 'EcsCluster'
+      Role: !GetAtt 'EcsEventsExecutionRole.Arn'
+      Code:
+        ZipFile: !Join
+          - "\n"
+          - - ' '
+            - import boto3
+            - import json
+            - import logging
+            - import os
+            - from base64 import b64decode
+            - from urllib.request import Request, urlopen
+            - from urllib.error import URLError, HTTPError
+            - '# The Slack channel to send a message to stored in the slackChannel
+              environment variable'
+            - !Sub
+              - SLACK_CHANNEL = '${SlackChannel}'
+              - SlackChannel: !Ref 'AsgNotificationSlackChannel'
+            - !Sub
+              - HOOK_URL = '${HookUrl}'
+              - HookUrl: !Ref 'AsgNotificationSlackHookUrl'
+            - logger = logging.getLogger()
+            - logger.setLevel(logging.INFO)
+            - 'def lambda_handler(event, context):'
+            - '    logger.info(''Event: '' + str(event))'
+            - '    try:'
+            - '        message = json.loads(event[''Records''][0][''Sns''][''Message''])'
+            - '        print(''Message: {}''.format(message))'
+            - '        msg = {}'
+            - '        msg[''AccountId''] = message[''AccountId'']'
+            - '        msg[''Description''] = message[''Description'']'
+            - '        msg[''AutoScalingGroupName''] = message[''AutoScalingGroupName'']'
+            - '        msg[''Cause''] = message[''Cause'']'
+            - '        msg[''Event''] = message[''Event'']'
+            - '        msg_str = '''''
+            - '        for x,y in msg.items():'
+            - '            msg_str += ''*{}*:{}\n''.format(x,y)'
+            - '    except:'
+            - '        print(''Unable to parse event'')'
+            - '        msg_str = ''Unable to parse event: {}''.format(event)'
+            - '        raise'
+            - ' '
+            - '    attachment_list = []'
+            - ' '
+            - '    if ''TERMINATE'' in msg[''Event'']:'
+            - '        color = ''#FF0000'''
+            - '    elif ''LAUNCH'' in msg[''Event'']:'
+            - '        color = ''#008000'''
+            - '    else:'
+            - '        color = ''#FFE600'''
+            - ' '
+            - '    region = os.environ.get(''AWS_REGION'')'
+            - '    cluster_name = os.environ.get(''ECS_CLUSTER'')'
+            - '    dashboard_link = ''https://{}.console.aws.amazon.com/cloudwatch/home?region={}#dashboards:name={}-AutoScaling''.format(region,
+              region, cluster_name)'
+            - ' '
+            - '    item = {'
+            - '        ''fallback'': ''Required plain-text summary of the attachment.'','
+            - '        ''color'': color,'
+            - '        ''author_name'': cluster_name,'
+            - '        ''title'': msg[''Description''],'
+            - '        ''title_link'' : dashboard_link,'
+            - '        ''text'': '' '','
+            - '        ''fields'': ['
+            - '                {'
+            - '                    ''title'': '' '' ,'
+            - '                    ''value'': msg[''Cause''],'
+            - '                    ''short'': False'
+            - '                }'
+            - '            ]'
+            - '        }'
+            - '    attachment_list.append(item)'
+            - ' '
+            - '    slack_message = {'
+            - '        ''channel'': SLACK_CHANNEL,'
+            - '        ''text'': '' '','
+            - '        ''attachments'' : attachment_list,'
+            - '        ''mrkdwn'': True'
+            - '    }'
+            - '    req = Request(HOOK_URL, json.dumps(slack_message).encode(''utf-8''))'
+            - '    try:'
+            - '        response = urlopen(req)'
+            - '        response.read()'
+            - '        logger.info(''Message posted to %s'', slack_message[''channel''])'
+            - '    except HTTPError as e:'
+            - '        logger.error(''Request failed: %d %s'', e.code, e.reason)'
+            - '    except URLError as e:'
+            - '        logger.error(''Server connection failed: %s'', e.reason)'
+      Runtime: python3.6
+      Timeout: '30'
+  EcsEventsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                Resource: '*'
+  EcsEventsResourcePolicy:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref 'EcsEventsNotifierLambda'
+      Principal: sns.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Ref 'ASGEventsTopic'
+  EcsMetricsNotifierLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      FunctionName: !Join
+        - '-'
+        - - EcsMetricsNotifier
+          - !Ref 'Network'
+          - !Ref 'ClusterName'
+      Role: !GetAtt 'EcsMetricsExecutionRole.Arn'
+      Code:
+        ZipFile: !Join
+          - "\n"
+          - - ' '
+            - import boto3
+            - import json
+            - import logging
+            - import os
+            - from base64 import b64decode
+            - from urllib.request import Request, urlopen
+            - from urllib.error import URLError, HTTPError
+            - '# The Slack channel to send a message to stored in the slackChannel
+              environment variable'
+            - !Sub
+              - SLACK_CHANNEL = '${SlackChannel}'
+              - SlackChannel: !Ref 'AsgNotificationSlackChannel'
+            - !Sub
+              - HOOK_URL = '${HookUrl}'
+              - HookUrl: !Ref 'AsgNotificationSlackHookUrl'
+            - logger = logging.getLogger()
+            - logger.setLevel(logging.INFO)
+            - 'def lambda_handler(event, context):'
+            - '    logger.info(''Event: '' + str(event))'
+            - '    try:'
+            - '        message = json.loads(event[''Records''][0][''Sns''][''Message''])'
+            - '        print(''Message: {}''.format(message))'
+            - '        msg = {}'
+            - '        msg[''AccountId''] = message[''AWSAccountId'']'
+            - '        msg[''AutoScalingGroupName''] = message[''Trigger''][''Dimensions''][0][''value'']'
+            - '        msg[''AlarmName''] = message[''AlarmName'']'
+            - '        msg[''Description''] = message[''AlarmDescription'']'
+            - '        msg[''NewStateValue''] = message[''NewStateValue'']'
+            - '        msg[''NewStateReason''] = message[''NewStateReason'']'
+            - '        msg[''MetricName''] = message[''Trigger''][''MetricName'']'
+            - '        msg[''Region''] = message[''Region'']'
+            - '        msg_str = '''''
+            - '        for x,y in msg.items():'
+            - '            msg_str += ''*{}*:{}\n''.format(x,y)'
+            - '    except Exception as e:'
+            - '        print(''Unable to parse event'')'
+            - '        msg_str = ''(Metrics Notifier) {}: Unable to parse event: {}''.format(e,
+              event)'
+            - '        raise'
+            - ' '
+            - '    attachment_list = []'
+            - ' '
+            - '    region = os.environ.get(''AWS_REGION'')'
+            - '    dashboard_link = ''https://{}.console.aws.amazon.com/cloudwatch/home?region={}#dashboards:name={}-AutoScaling''.format(region,
+              region, msg[''AutoScalingGroupName''])'
+            - ' '
+            - '    item = {'
+            - '        ''fallback'': ''Required plain-text summary of the attachment.'', '
+            - '        ''color'': ''#FFE600'', '
+            - '        ''author_name'': msg[''AutoScalingGroupName''],'
+            - '        ''title'': msg[''AlarmName''],'
+            - '        ''title_link'' : dashboard_link,'
+            - '        ''text'': msg[''NewStateReason''],'
+            - '        ''fields'': ['
+            - '                {'
+            - '                    ''title'': ''Description'','
+            - '                    ''value'': msg[''Description''],'
+            - '                    ''short'': False'
+            - '                }'
+            - '            ]'
+            - '        }'
+            - '    attachment_list.append(item)'
+            - ' '
+            - '    slack_message = {'
+            - '        ''channel'': SLACK_CHANNEL,'
+            - '        ''text'': '' '','
+            - '        ''attachments'' : attachment_list,'
+            - '        ''mrkdwn'': True'
+            - '    }'
+            - '    req = Request(HOOK_URL, json.dumps(slack_message).encode(''utf-8''))'
+            - '    try:'
+            - '        response = urlopen(req)'
+            - '        response.read()'
+            - '        logger.info(''Message posted to %s'', slack_message[''channel''])'
+            - '    except HTTPError as e:'
+            - '        logger.error(''Request failed: %d %s'', e.code, e.reason)'
+            - '    except URLError as e:'
+            - '        logger.error(''Server connection failed: %s'', e.reason)'
+      Runtime: python3.6
+      Timeout: '30'
+  EcsMetricsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                Resource: '*'
+  EcsMetricsResourcePolicy:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref 'EcsMetricsNotifierLambda'
+      Principal: sns.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Ref 'ECSMetricsAlarmTopic'
+  EcsCustomMetricLambda:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - EcsCluster
+      - MemoryReservationLowAlarm
+      - MemoryUtilizationLowAlarm
+      - CpuReservationLowAlarm
+      - CpuUtilizationLowAlarm
+    Properties:
+      Handler: index.lambda_handler
+      FunctionName: !Join
+        - '-'
+        - - EcsCustomMetric
+          - !Ref 'Network'
+          - !Ref 'ClusterName'
+      Environment:
+        Variables:
+          ECS_CLUSTER: !Ref 'EcsCluster'
+          CONTAINER_MAX_CPU: !Ref 'ContainerMaxCpu'
+          CONTAINER_MAX_MEM: !Ref 'ContainerMaxMem'
+          MEMORY_RESERVATION_LOW_ALARM: !Ref 'MemoryReservationLowAlarm'
+          MEMORY_UTILIZATION_LOW_ALARM: !Ref 'MemoryUtilizationLowAlarm'
+          CPU_RESERVATION_LOW_ALARM: !Ref 'CpuReservationLowAlarm'
+          CPU_UTILIZATION_LOW_ALARM: !Ref 'CpuUtilizationLowAlarm'
+      Role: !GetAtt 'EcsCustomMetricExecutionRole.Arn'
+      Code:
+        ZipFile: !Join
+          - "\n"
+          - - ' '
+            - import boto3
+            - import json
+            - import logging
+            - import os
+            - from base64 import b64decode
+            - from urllib.request import Request, urlopen
+            - from urllib.error import URLError, HTTPError
+            - import datetime
+            - import dateutil
+            - '# The Slack channel to send a message to stored in the slackChannel
+              environment variable'
+            - !Sub
+              - SLACK_CHANNEL = '${SlackChannel}'
+              - SlackChannel: !Ref 'AsgNotificationSlackChannel'
+            - !Sub
+              - HOOK_URL = '${HookUrl}'
+              - HookUrl: !Ref 'AsgNotificationSlackHookUrl'
+            - logger = logging.getLogger()
+            - logger.setLevel(logging.INFO)
+            - ' '
+            - 'def lambda_handler(event, context):'
+            - '    logger.info(''Event: '' + str(event))'
+            - ' '
+            - '    cluster = os.environ.get(''ECS_CLUSTER'')'
+            - '    container_max_cpu = int(os.environ.get(''CONTAINER_MAX_CPU''))'
+            - '    container_max_mem = int(os.environ.get(''CONTAINER_MAX_MEM''))'
+            - ' '
+            - '    print(''Calculating schedulable containers for cluster %s'' % cluster)'
+            - '    ecs = boto3.client(''ecs'')'
+            - ' '
+            - '    instance_lists = []'
+            - '    next_token = '''''
+            - ' '
+            - '    while next_token is not None:'
+            - '        response = ecs.list_container_instances('
+            - '            cluster=cluster,'
+            - '            status=''ACTIVE'','
+            - '            maxResults=100,'
+            - '            nextToken=next_token)'
+            - ' '
+            - '        instance_lists.append(response[''containerInstanceArns''])'
+            - ' '
+            - '        if ''nextToken'' in response:'
+            - '            next_token = response[''nextToken'']'
+            - '        else:'
+            - '            next_token = None'
+            - ' '
+            - '    instances = []'
+            - '    for instance_list in instance_lists:'
+            - '        response = ecs.describe_container_instances('
+            - '            cluster=cluster,'
+            - '            containerInstances=instance_list)'
+            - ' '
+            - '        instances += response[''containerInstances'']'
+            - ' '
+            - '    print(''Found {} Instances in Cluster''.format(len(instances)))'
+            - '    schedulable_containers = 0'
+            - '    empty_instances = 0'
+            - '    total_pending_tasks = 0'
+            - ' '
+            - '    for instance in instances:'
+            - '        remaining_resources = {resource[''name'']: resource for resource
+              in instance[''remainingResources'']}'
+            - ' '
+            - '        containers_by_cpu = int(remaining_resources[''CPU''][''integerValue'']
+              / container_max_cpu)'
+            - '        containers_by_mem = int(remaining_resources[''MEMORY''][''integerValue'']
+              / container_max_mem)'
+            - ' '
+            - '        schedulable_containers += min(containers_by_cpu, containers_by_mem)'
+            - ' '
+            - '        print(''%s containers could be scheduled on %s based on CPU
+              only'' % (containers_by_cpu, instance[''ec2InstanceId'']))'
+            - '        print(''%s containers could be scheduled on %s based on memory
+              only'' % (containers_by_mem, instance[''ec2InstanceId'']))'
+            - ' '
+            - '        if int(instance[''runningTasksCount'']) == 0 and int(instance[''pendingTasksCount''])
+              == 0:'
+            - '            empty_instances += 1'
+            - '        total_pending_tasks += int(instance[''pendingTasksCount''])'
+            - ' '
+            - '    print(''Schedulable containers: %s'' % schedulable_containers)'
+            - '    print(''Empty Instances: %s'' % empty_instances)'
+            - ' '
+            - '    cw = boto3.client(''cloudwatch'')'
+            - '    cw.put_metric_data(Namespace=''AWS/ECS'','
+            - '                       MetricData=[{'
+            - '                           ''MetricName'': ''SchedulableContainers'','
+            - '                           ''Dimensions'': [{'
+            - '                               ''Name'': ''ClusterName'','
+            - '                               ''Value'': cluster'
+            - '                           }],'
+            - '                           ''Timestamp'': datetime.datetime.now(dateutil.tz.tzlocal()),'
+            - '                           ''Value'': schedulable_containers'
+            - '                       }])'
+            - ' '
+            - '    print(''Schedulable Containers Metric was send to CloudWatch'')'
+            - ' '
+            - '    cw.put_metric_data(Namespace=''AWS/ECS'','
+            - '                       MetricData=[{'
+            - '                           ''MetricName'': ''EmptyInstances'','
+            - '                           ''Dimensions'': [{'
+            - '                               ''Name'': ''ClusterName'','
+            - '                               ''Value'': cluster'
+            - '                           }],'
+            - '                           ''Timestamp'': datetime.datetime.now(dateutil.tz.tzlocal()),'
+            - '                           ''Value'': empty_instances'
+            - '                       }])'
+            - ' '
+            - '    print(''Empty Instances Metric was send to CloudWatch'')'
+            - ' '
+            - '    return {}'
+      Runtime: python3.6
+      Timeout: '30'
+  EcsCustomMetricExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecs:ListServices
+                  - ecs:ListTasks
+                  - ecs:ListTaskDefinitionFamilies
+                  - ecs:DescribeServices
+                  - ecs:ListContainerInstances
+                  - ecs:DescribeContainerInstances
+                  - ecs:DescribeTasks
+                  - ecs:ListTaskDefinitions
+                  - ecs:DescribeTaskDefinition
+                  - ecs:DescribeClusters
+                  - ecs:ListClusters
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricAlarm
+                  - cloudwatch:PutMetricData
+                  - cloudwatch:DescribeAlarmHistory
+                  - cloudwatch:GetDashboard
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:DescribeAlarmsForMetric
+                  - cloudwatch:ListDashboards
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:SetAlarmState
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:ListMetrics
+                Resource: '*'
+  CustomMetricScheduledRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Custom Metric ASG Scheduled Rule
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt 'EcsCustomMetricLambda.Arn'
+          Id: CustomMetricsLambdaFunction
+  CustomMetricsPermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref 'EcsCustomMetricLambda'
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt 'CustomMetricScheduledRule.Arn'
+  EcsTaskMetricLambda:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - EcsCluster
+      - MemoryReservationLowAlarm
+      - MemoryUtilizationLowAlarm
+      - CpuReservationLowAlarm
+      - CpuUtilizationLowAlarm
+    Properties:
+      Handler: index.lambda_handler
+      FunctionName: !Join
+        - '-'
+        - - EcsTaskMetric
+          - !Ref 'Network'
+          - !Ref 'ClusterName'
+      Environment:
+        Variables:
+          ECS_CLUSTER: !Ref 'EcsCluster'
+          CONTAINER_MAX_CPU: !Ref 'ContainerMaxCpu'
+          CONTAINER_MAX_MEM: !Ref 'ContainerMaxMem'
+          MEMORY_RESERVATION_LOW_ALARM: !Ref 'MemoryReservationLowAlarm'
+          MEMORY_UTILIZATION_LOW_ALARM: !Ref 'MemoryUtilizationLowAlarm'
+          CPU_RESERVATION_LOW_ALARM: !Ref 'CpuReservationLowAlarm'
+          CPU_UTILIZATION_LOW_ALARM: !Ref 'CpuUtilizationLowAlarm'
+      Role: !GetAtt 'EcsTaskMetricExecutionRole.Arn'
+      Code:
+        ZipFile: !Join
+          - "\n"
+          - - ' '
+            - import boto3
+            - import json
+            - import logging
+            - import os
+            - from base64 import b64decode
+            - from urllib.request import Request, urlopen
+            - from urllib.error import URLError, HTTPError
+            - import datetime
+            - import dateutil
+            - '# The Slack channel to send a message to stored in the slackChannel
+              environment variable'
+            - !Sub
+              - SLACK_CHANNEL = '${SlackChannel}'
+              - SlackChannel: !Ref 'AsgNotificationSlackChannel'
+            - !Sub
+              - HOOK_URL = '${HookUrl}'
+              - HookUrl: !Ref 'AsgNotificationSlackHookUrl'
+            - logger = logging.getLogger()
+            - logger.setLevel(logging.INFO)
+            - ' '
+            - 'def lambda_handler(event, context):'
+            - '    logger.info(''Event: '' + str(event))'
+            - ' '
+            - '    cluster = os.environ.get(''ECS_CLUSTER'')'
+            - ' '
+            - '    print(''Calculating task metrics for cluster %s'' % cluster)'
+            - '    ecs = boto3.client(''ecs'')'
+            - ' '
+            - '    service_lists = []'
+            - '    next_token = '''''
+            - ' '
+            - '    while next_token is not None:'
+            - '        response = ecs.list_services('
+            - '            cluster=cluster,'
+            - '            launchType=''EC2'','
+            - '            maxResults=10,'
+            - '            nextToken=next_token)'
+            - ' '
+            - '        service_lists.append(response[''serviceArns''])'
+            - ' '
+            - '        if ''nextToken'' in response:'
+            - '            next_token = response[''nextToken'']'
+            - '        else:'
+            - '            next_token = None'
+            - ' '
+            - '    services = []'
+            - '    for service_list in service_lists:'
+            - '        response = ecs.describe_services('
+            - '            cluster=cluster,'
+            - '            services=service_list)'
+            - ' '
+            - '        services += response[''services'']'
+            - ' '
+            - '    print(''Found {} Services in Cluster''.format(len(services)))'
+            - '    total_running_tasks = 0'
+            - '    total_desired_tasks = 0'
+            - '    total_pending_tasks = 0'
+            - '    services_not_active = 0'
+            - ' '
+            - '    for service in services:'
+            - '        total_running_tasks += int(service[''runningCount''])'
+            - '        total_desired_tasks += int(service[''desiredCount''])'
+            - '        total_pending_tasks += int(service[''pendingCount''])'
+            - '        if service[''status''] != ''ACTIVE'':'
+            - '            services_not_active += 1'
+            - ' '
+            - '    cw = boto3.client(''cloudwatch'')'
+            - ' '
+            - '    cw.put_metric_data(Namespace=''AWS/ECS'','
+            - '           MetricData=[{'
+            - '               ''MetricName'': ''PendingTaskCount'','
+            - '               ''Dimensions'': [{'
+            - '                   ''Name'': ''ClusterName'','
+            - '                   ''Value'': cluster'
+            - '               }],'
+            - '               ''Timestamp'': datetime.datetime.now(dateutil.tz.tzlocal()),'
+            - '               ''Value'': total_pending_tasks'
+            - '           }])'
+            - ' '
+            - '    print(''Pending Tasks Metric was send to CloudWatch:{}''.format(total_pending_tasks))'
+            - ' '
+            - '    cw.put_metric_data(Namespace=''AWS/ECS'','
+            - '           MetricData=[{'
+            - '               ''MetricName'': ''RunningTaskCount'','
+            - '               ''Dimensions'': [{'
+            - '                   ''Name'': ''ClusterName'','
+            - '                   ''Value'': cluster'
+            - '               }],'
+            - '               ''Timestamp'': datetime.datetime.now(dateutil.tz.tzlocal()),'
+            - '               ''Value'': total_running_tasks'
+            - '           }])'
+            - ' '
+            - '    print(''Running Tasks Metric was send to CloudWatch:{}''.format(total_running_tasks))'
+            - ' '
+            - '    cw.put_metric_data(Namespace=''AWS/ECS'','
+            - '           MetricData=[{'
+            - '               ''MetricName'': ''DesiredTaskCount'','
+            - '               ''Dimensions'': [{'
+            - '                   ''Name'': ''ClusterName'','
+            - '                   ''Value'': cluster'
+            - '               }],'
+            - '               ''Timestamp'': datetime.datetime.now(dateutil.tz.tzlocal()),'
+            - '               ''Value'': total_desired_tasks'
+            - '           }])'
+            - ' '
+            - '    print(''Desired Tasks Metric was send to CloudWatch:{}''.format(total_desired_tasks))'
+            - ' '
+            - '    cw.put_metric_data(Namespace=''AWS/ECS'','
+            - '           MetricData=[{'
+            - '               ''MetricName'': ''ServicesNotActive'','
+            - '               ''Dimensions'': [{'
+            - '                   ''Name'': ''ClusterName'','
+            - '                   ''Value'': cluster'
+            - '               }],'
+            - '               ''Timestamp'': datetime.datetime.now(dateutil.tz.tzlocal()),'
+            - '               ''Value'': services_not_active'
+            - '           }])'
+            - ' '
+            - '    print(''Services Not Active Metric was send to CloudWatch:{}''.format(services_not_active))'
+            - ' '
+            - ' '
+            - '    return {}'
+      Runtime: python3.6
+      Timeout: '30'
+  EcsTaskMetricExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecs:ListServices
+                  - ecs:ListTasks
+                  - ecs:ListTaskDefinitionFamilies
+                  - ecs:DescribeServices
+                  - ecs:ListContainerInstances
+                  - ecs:DescribeContainerInstances
+                  - ecs:DescribeTasks
+                  - ecs:ListTaskDefinitions
+                  - ecs:DescribeTaskDefinition
+                  - ecs:DescribeClusters
+                  - ecs:ListClusters
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricAlarm
+                  - cloudwatch:PutMetricData
+                  - cloudwatch:DescribeAlarmHistory
+                  - cloudwatch:GetDashboard
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:DescribeAlarmsForMetric
+                  - cloudwatch:ListDashboards
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:SetAlarmState
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:ListMetrics
+                Resource: '*'
+  TaskMetricScheduledRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Task Metric ASG Scheduled Rule
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt 'EcsTaskMetricLambda.Arn'
+          Id: TaskMetricsLambdaFunction
+  TaskMetricPermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref 'EcsTaskMetricLambda'
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt 'TaskMetricScheduledRule.Arn'
+  EcsCombinedUtilResMetricLambda:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - EcsCluster
+      - MemoryReservationLowAlarm
+      - MemoryUtilizationLowAlarm
+      - CpuReservationLowAlarm
+      - CpuUtilizationLowAlarm
+    Properties:
+      Handler: index.lambda_handler
+      FunctionName: !Join
+        - '-'
+        - - EcsCombinedUtilMemMetric
+          - !Ref 'Network'
+          - !Ref 'ClusterName'
+      Environment:
+        Variables:
+          ECS_CLUSTER: !Ref 'EcsCluster'
+          MEMORY_RESERVATION_LOW_ALARM: !Ref 'MemoryReservationLowAlarm'
+          MEMORY_UTILIZATION_LOW_ALARM: !Ref 'MemoryUtilizationLowAlarm'
+          CPU_RESERVATION_LOW_ALARM: !Ref 'CpuReservationLowAlarm'
+          CPU_UTILIZATION_LOW_ALARM: !Ref 'CpuUtilizationLowAlarm'
+      Role: !GetAtt 'CombinedUtilResMetricExecutionRole.Arn'
+      Code:
+        ZipFile: !Join
+          - "\n"
+          - - ' '
+            - import boto3
+            - import json
+            - import logging
+            - import os
+            - from base64 import b64decode
+            - from urllib.request import Request, urlopen
+            - from urllib.error import URLError, HTTPError
+            - import datetime
+            - import dateutil
+            - '# The Slack channel to send a message to stored in the slackChannel
+              environment variable'
+            - !Sub
+              - SLACK_CHANNEL = '${SlackChannel}'
+              - SlackChannel: !Ref 'AsgNotificationSlackChannel'
+            - !Sub
+              - HOOK_URL = '${HookUrl}'
+              - HookUrl: !Ref 'AsgNotificationSlackHookUrl'
+            - logger = logging.getLogger()
+            - logger.setLevel(logging.INFO)
+            - ' '
+            - 'def getCombinedUtilResMetric(cw_client, cluster):'
+            - '    # Looks at alarm states for cluster Util and Reservation for Cpu
+              and Memory. Combines alarm states into single metric'
+            - ' '
+            - '    cpu_res_low_alarm = os.environ.get(''CPU_RESERVATION_LOW_ALARM'')'
+            - '    cpu_util_low_alarm = os.environ.get(''CPU_UTILIZATION_LOW_ALARM'')'
+            - '    memory_res_low_alarm = os.environ.get(''MEMORY_RESERVATION_LOW_ALARM'')'
+            - '    memory_util_low_alarm = os.environ.get(''MEMORY_UTILIZATION_LOW_ALARM'')'
+            - ' '
+            - '    alarm_names = [ cpu_res_low_alarm, cpu_util_low_alarm, memory_res_low_alarm,
+              memory_util_low_alarm ]'
+            - ' '
+            - '    response = cw_client.describe_alarms( AlarmNames= alarm_names )'
+            - ' '
+            - '    alarms = {}'
+            - '    for alarm in response[''MetricAlarms'']:'
+            - '        alarms[alarm[''AlarmName'']] = alarm[''StateValue'']'
+            - '    logger.info(''Alarms: {}''.format(alarms))'
+            - ' '
+            - '    alarm_count = 0'
+            - '    for alarm in alarm_names:'
+            - '        if alarm not in alarms.keys():'
+            - '            raise Exception(''Did not find alarm name in expected alarm
+              state mappings: {}''.format(alarm), alarms)'
+            - '        if alarms[alarm] == ''ALARM'':'
+            - '            alarm_count += 1'
+            - ' '
+            - '    return alarm_count'
+            - ' '
+            - 'def lambda_handler(event, context):'
+            - '    logger.info(''Event: '' + str(event))'
+            - ' '
+            - '    cluster = os.environ.get(''ECS_CLUSTER'')'
+            - ' '
+            - '    cw = boto3.client(''cloudwatch'')'
+            - '    combined_util_res_metric = getCombinedUtilResMetric(cw, cluster)'
+            - '    print(''Combined Util Res Metric: {}''.format(combined_util_res_metric))'
+            - ' '
+            - '    cw.put_metric_data(Namespace=''AWS/ECS'','
+            - '                      MetricData=[{'
+            - '                         ''MetricName'': ''CombinedUtilResLow'','
+            - '                         ''Dimensions'': [{'
+            - '                             ''Name'': ''ClusterName'','
+            - '                             ''Value'': cluster'
+            - '                         }],'
+            - '                         ''Timestamp'': datetime.datetime.now(dateutil.tz.tzlocal()),'
+            - '                         ''Value'': combined_util_res_metric'
+            - '                     }])'
+            - ' '
+            - '    print(''Combined Res Util Metric was send to CloudWatch: {}''.format(combined_util_res_metric))'
+            - ' '
+            - '    return {}'
+      Runtime: python3.6
+      Timeout: '30'
+  CombinedUtilResMetricExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecs:ListServices
+                  - ecs:ListTasks
+                  - ecs:ListTaskDefinitionFamilies
+                  - ecs:DescribeServices
+                  - ecs:ListContainerInstances
+                  - ecs:DescribeContainerInstances
+                  - ecs:DescribeTasks
+                  - ecs:ListTaskDefinitions
+                  - ecs:DescribeTaskDefinition
+                  - ecs:DescribeClusters
+                  - ecs:ListClusters
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricAlarm
+                  - cloudwatch:PutMetricData
+                  - cloudwatch:DescribeAlarmHistory
+                  - cloudwatch:GetDashboard
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:DescribeAlarmsForMetric
+                  - cloudwatch:ListDashboards
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:SetAlarmState
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:ListMetrics
+                Resource: '*'
+  CombinedUtilResMetricScheduledRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Custom Metric ASG Scheduled Rule
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt 'EcsCombinedUtilResMetricLambda.Arn'
+          Id: CustomMetricsLambdaFunction
+  CombinedUtilResPermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref 'EcsCombinedUtilResMetricLambda'
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt 'CombinedUtilResMetricScheduledRule.Arn'
+  EcsAsg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: EcsCluster
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT25M
+    Properties:
+      Cooldown: '60'
+      TargetGroupARNs:
+        - !If
+          - CreateLB
+          - !Ref 'LinkerdInternetTargetGroup'
+          - !Ref 'AWS::NoValue'
+        - !If
+          - CreateDevLB
+          - !Ref 'LinkerdDevTargetGroup'
+          - !Ref 'AWS::NoValue'
+      VPCZoneIdentifier:
+        - !GetAtt 'NetworkInfo.PrivateSubnet1Id'
+        - !GetAtt 'NetworkInfo.PrivateSubnet2Id'
+        - !GetAtt 'NetworkInfo.PrivateSubnet3Id'
+      LaunchConfigurationName: !Ref 'EcsLc'
+      MinSize: !Ref 'MinInstances'
+      MaxSize: !Ref 'MaxInstances'
+      DesiredCapacity: !Ref 'DesiredInstances'
+      NotificationConfiguration:
+        TopicARN: !Ref 'ASGEventsTopic'
+        NotificationTypes:
+          - autoscaling:EC2_INSTANCE_LAUNCH
+          - autoscaling:EC2_INSTANCE_LAUNCH_ERROR
+          - autoscaling:EC2_INSTANCE_TERMINATE
+          - autoscaling:EC2_INSTANCE_TERMINATE_ERROR
+      MetricsCollection:
+        - Granularity: 1Minute
+      TerminationPolicies:
+        - OldestLaunchConfiguration
+        - OldestInstance
+      Tags:
+        - Key: network
+          Value: !Ref 'Network'
+          PropagateAtLaunch: 'true'
+        - Key: role
+          Value: ecs
+          PropagateAtLaunch: 'true'
+        - Key: Name
+          Value: !Ref 'EcsCluster'
+          PropagateAtLaunch: 'true'
+  EcsLc:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          InstallWithNginx:
+            - Install
+            - Telegraf
+            - Consul
+            - Linkerd
+            - Jaeger
+            - Nginx
+          InstallWithOutNginx:
+            - Install
+            - Telegraf
+            - Consul
+            - Linkerd
+            - Jaeger
+        Install:
+          packages:
+            yum:
+              jq: []
+          services:
+            sysvinit:
+              docker:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/sysconfig/docker
+                  - /etc/docker/daemon.json
+          files:
+            /etc/sysconfig/docker:
+              content: !Join
+                - ''
+                - - "# The max number of open files for the daemon itself, and all\n"
+                  - "# running containers.  The default value of 1048576 mirrors the\
+                    \ value\n"
+                  - "# used by the systemd service unit.\n"
+                  - "DAEMON_MAXFILES=1048576\n\n"
+                  - "# Additional startup options for the Docker daemon, for example:\n"
+                  - "# OPTIONS=\"--ip-forward=true --iptables=true\"\n"
+                  - "# By default we limit the number of open files per container\n"
+                  - '# OPTIONS="--default-ulimit nofile=2048:8192 --log-driver=gelf '
+                  - '--log-opt labels=com.amazonaws.ecs.task-arn,com.amazonaws.ecs.container-name '
+                  - "--log-opt env=SERVICE_NAME \"\n"
+                  - "OPTIONS=\"--default-ulimit nofile=1000000:1000000\"\n"
+            /etc/docker/daemon.json:
+              content: !Join
+                - ''
+                - - "{\n"
+                  - "  \"log-driver\": \"splunk\",\n"
+                  - "  \"log-opts\": {\n"
+                  - '    "splunk-token": "'
+                  - !Ref 'SplunkToken'
+                  - "\",\n"
+                  - "    \"labels\": \"SERVICE_NAME,SERVICE_TAGS,WORKER_NAME,REAL_SERVICE_NAME,SERVICE_VERSION,DEPLOYMENT,com.amazonaws.ecs.task-arn\"\
+                    ,\n"
+                  - "    \"env\": \"SERVICE_NAME,SERVICE_TAGS,WORKER_NAME,REAL_SERVICE_NAME,SERVICE_VERSION,DEPLOYMENT\"\
+                    ,\n"
+                  - '    "splunk-url": "'
+                  - !Ref 'SplunkEndpoint'
+                  - "\",\n"
+                  - "    \"tag\": \"{{.Name}}/{{.ID}}\",\n"
+                  - "    \"splunk-insecureskipverify\": \"true\",\n"
+                  - "    \"splunk-verify-connection\": \"false\"\n"
+                  - "   }\n"
+                  - "}\n"
+            /etc/ecs/ecs.config:
+              content: !Sub
+                - |
+                  ECS_CLUSTER=${ECS_CLUSTER}
+                  ECS_ENGINE_AUTH_TYPE=docker
+                  ECS_RESERVED_MEMORY="${ECS_RESERVED_MEMORY}"
+                  ECS_AVAILABLE_LOGGING_DRIVERS=["gelf", "json-file", "syslog", "splunk"]
+                - {
+                    ECS_CLUSTER: !Ref 'EcsCluster',
+                    ECS_RESERVED_MEMORY: !FindInMap [EnvMap, !Ref Network, ECSRESERVEDMEMORY]
+                  }
+
+            /etc/sysctl.d/01-Fox.conf:
+              content: !Join
+                - ''
+                - - "fs.file-max = 2097152\n"
+          commands:
+            01_apply_sysctl:
+              command: /sbin/sysctl -p /etc/sysctl.d/01-Fox.conf
+        Telegraf:
+          files:
+            /etc/telegraf/telegraf.conf:
+              content: !Join
+                - ''
+                - - "[agent]\n"
+                  - "  interval = \"10s\"\n"
+                  - "  round_interval = true\n"
+                  - "  metric_buffer_limit = 100000\n"
+                  - "  flush_buffer_when_full = true\n"
+                  - "  collection_jitter = \"0s\"\n"
+                  - "  flush_interval = \"10s\"\n"
+                  - "  flush_jitter = \"9s\"\n"
+                  - "  debug = false\n"
+                  - "  quiet = false\n"
+                  - "  hostname = \"\"\n"
+                  - "\n"
+                  - "[global_tags]\n"
+                  - "  instance_id = \"$INSTANCE_ID\"\n"
+                  - '  ecs_clustername = "'
+                  - !Ref 'EcsCluster'
+                  - "\"\n"
+                  - '  environment = "'
+                  - !Ref 'Network'
+                  - "\"\n"
+                  - '  region = "'
+                  - !Ref 'AWS::Region'
+                  - "\"\n"
+                  - "  availability_zone = \"$AZ\"\n"
+                  - "  role = \"ecs\"\n"
+            /etc/telegraf/telegraf.d/output-influxdb.conf:
+              content: !Join
+                - ''
+                - - "[[outputs.influxdb]]\n"
+                  - "  urls = [\"$INFLUX_ENDPOINT\"]\n"
+                  - '  database = "telegraf-'
+                  - !Ref 'Network'
+                  - "\"\n"
+                  - "  precision = \"s\"\n"
+                  - "  timeout = \"5s\"\n"
+                  - "  user_agent = \"telegraf\"\n"
+                  - "  udp_payload = 512\n"
+            /etc/telegraf/telegraf.d/system.conf:
+              content: !Join
+                - ''
+                - - "[[inputs.cpu]]\n"
+                  - "    percpu = false\n"
+                  - "    totalcpu = true\n"
+                  - "    fielddrop = [\"time_*\"]\n"
+                  - "\n"
+                  - "[[inputs.disk]]\n"
+                  - "    ignore_fs = [\"tmpfs\", \"devtmpfs\"]\n"
+                  - "\n"
+                  - "[[inputs.diskio]]\n"
+                  - "\n"
+                  - "[[inputs.mem]]\n"
+                  - "\n"
+                  - "[[inputs.swap]]\n"
+                  - "\n"
+                  - "[[inputs.system]]\n"
+                  - "\n"
+                  - "[[inputs.net]]\n"
+                  - "    interfaces = [\"eth0\", \"docker0\"]\n"
+                  - "\n"
+                  - "[[inputs.netstat]]\n"
+                  - "\n"
+                  - "[[inputs.nstat]]\n"
+                  - "\n"
+                  - "[[inputs.kernel]]\n"
+                  - "\n"
+                  - "[[inputs.processes]]\n"
+                  - "\n"
+                  - "[[inputs.linux_sysctl_fs]]\n"
+                  - "\n"
+            /etc/telegraf/telegraf.d/statsd.conf:
+              content: !Join
+                - ''
+                - - "[[inputs.statsd]]\n"
+                  - "  service_address = \":8125\"\n"
+                  - "  delete_gauges = true\n"
+                  - "  delete_counters = true\n"
+                  - "  delete_sets = true\n"
+                  - "  delete_timings = true\n"
+                  - "  percentiles = [90,95,98,99]\n"
+                  - "  metric_separator = \"_\"\n"
+                  - "  allowed_pending_messages = 20000\n"
+                  - "  percentile_limit = 2000\n"
+                  - "  parse_data_dog_tags = true\n"
+                  - "  udp_packet_size = 1500\n"
+            /etc/telegraf/telegraf.d/docker.conf:
+              content: !Join
+                - ''
+                - - "[[inputs.docker]]\n"
+                  - "    endpoint = \"unix:///var/run/docker.sock\"\n"
+                  - "    container_names = []\n"
+                  - "    perdevice = true\n"
+                  - "    total = true\n"
+                  - "    docker_label_exclude = [ \"com.amazonaws.ecs.cluster\" ]\n"
+                  - "\n"
+            /etc/telegraf/telegraf.d/exec.conf:
+              content: !Join
+                - ''
+                - - "[[inputs.exec]]\n"
+                  - "\n"
+                  - "timeout = \"5s\"\n"
+                  - "data_format = \"influx\"\n"
+                  - "commands = [\"/etc/telegraf/telegraf.exec/*.sh\"]\n"
+            /etc/telegraf/telegraf.d/socket_listner.conf:
+              content: !Join
+                - ''
+                - - "[[inputs.socket_listener]]\n"
+                  - "  service_address = \"udp://:8094\"\n"
+                  - "  data_format = \"influx\"\n"
+            /etc/telegraf/telegraf.d/internal.conf:
+              content: !Join
+                - ''
+                - - "[[inputs.internal]]\n"
+            /etc/telegraf/telegraf.exec/noop.sh:
+              content: !Join
+                - ''
+                - - "#!/bin/bash\n"
+                  - "\n# This file is here to stop the plugin from complaining.  Please\
+                    \ add executable files to \n"
+                  - "# this directory in order for them to be run.  Note that the\
+                    \ output must be influx line protocol\n"
+              mode: '000755'
+            /etc/init/telegraf.conf:
+              content: !Join
+                - ''
+                - - "description \"Starts up telegraf to collect and send metrics\
+                    \ for the system\"\n"
+                  - "author \"Fox DCG\"\n"
+                  - "start on runlevels [2345]\n"
+                  - "respawn\n"
+                  - "stop on starting rc RUNLEVEL=[016]\n"
+                  - "\n"
+                  - "script\n"
+                  - '   INFLUX_ENDPOINT=http://'
+                  - !ImportValue
+                    Fn::Join:
+                      - ''
+                      - - Telegraf-Lb-URL-
+                        - !Ref 'Network'
+                  - ':'
+                  - !ImportValue
+                    Fn::Join:
+                      - ''
+                      - - Telegraf-Lb-Port-
+                        - !Ref 'Network'
+                  - "\n"
+                  - "   INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n"
+                  - "   AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)\n"
+                  - "   export AZ INFLUX_ENDPOINT INSTANCE_ID\n"
+                  - "   telegraf --config /etc/telegraf/telegraf.conf --config-directory\
+                    \ /etc/telegraf/telegraf.d\n"
+                  - "end script\n"
+                  - "\n"
+          commands:
+            01_dl_telegraf:
+              command: !Join
+                - ''
+                - - curl -o /tmp/telegraf.tar.gz https://dl.influxdata.com/telegraf/releases/telegraf-
+                  - !Ref 'TelegrafVersion'
+                  - _linux_amd64.tar.gz
+            02_extract_telegraf:
+              command: tar xzf /tmp/telegraf.tar.gz -C /tmp
+            03_move_files:
+              command: mv /tmp/telegraf/usr/bin/telegraf /usr/bin/telegraf; mv /tmp/telegraf/etc/logrotate.d/telegraf
+                /etc/logrotate.d/telegraf
+            04_cleanup:
+              command: rm -rf /tmp/telegraf.tar.gz /tmp/telegraf
+            05_start_telegraf:
+              command: start telegraf
+        Consul:
+          files:
+            /opt/consul/config/consul.json:
+              content: !Join
+                - ''
+                - - "{\n"
+                  - "  \"leave_on_terminate\": true,\n"
+                  - "  \"enable_script_checks\": true,\n"
+                  - "  \"performance\": {\n"
+                  - "    \"raft_multiplier\": 1\n"
+                  - "  },\n"
+                  - "  \"telemetry\": {\n"
+                  - "    \"dogstatsd_addr\": \"127.0.0.1:8125\",\n"
+                  - "    \"disable_hostname\": true\n"
+                  - "  }\n"
+                  - "}\n"
+            /opt/consul/config/acl.json:
+              content: !Join
+                - ''
+                - - "{\n"
+                  - '  "acl_agent_token": "'
+                  - !Ref 'ConsulAgentToken'
+                  - "\"\n"
+                  - "}\n"
+            /etc/init/registrator.conf:
+              content: !Join
+                - ''
+                - - "description \"Starts up Registrator agent on system\"\n"
+                  - "author \"Fox DCG\"\n"
+                  - "start on started consul\n"
+                  - "respawn\n"
+                  - "\n"
+                  - "pre-start script\n"
+                  - "   docker ps -aq -f name=consul-registrator | xargs -r docker\
+                    \ rm\n"
+                  - "end script\n"
+                  - "\n"
+                  - "script\n"
+                  - '    AWS_ENV='
+                  - !Ref 'Network'
+                  - "\n"
+                  - "\n"
+                  - "    if [ -z $AWS_ENV ]\n"
+                  - "    then\n"
+                  - "        echo \"Environment not given\"\n"
+                  - "        exit 1\n"
+                  - "    fi\n"
+                  - "\n"
+                  - "    LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)\n"
+                  - "    INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n"
+                  - "    AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)\n"
+                  - '    REGISTRATOR_TOKEN='
+                  - !Ref 'RegistratorToken'
+                  - "\n"
+                  - "    echo \"Starting Consul Registrator...\"\n"
+                  - "    docker run -e GOMAXPROCS=$(nproc) -v /var/run/docker.sock:/tmp/docker.sock\
+                    \ -h $INSTANCE_ID \\\n"
+                  - "               --name consul-registrator -l service_name=consul-registrator\
+                    \ \\\n"
+                  - "               -e CONSUL_HTTP_TOKEN=$REGISTRATOR_TOKEN \\\n"
+                  - !Ref 'RegistratorRepo'
+                  - ':'
+                  - !Ref 'RegistratorVersion'
+                  - " -cleanup -retry-attempts 20 \\\n"
+                  - "                -retry-interval 500 -tags $AWS_ENV,$AZ,$INSTANCE_ID\
+                    \ -ip $LOCAL_IP -resync 3600 consul://${LOCAL_IP}:8500\n"
+                  - "\n"
+                  - "end script\n"
+            /etc/init/consul.conf:
+              content: !Join
+                - ''
+                - - "description \"Starts up Consul agent on system\"\n"
+                  - "author \"Fox DCG\"\n"
+                  - "start on started ecs\n"
+                  - "stop on starting rc RUNLEVEL=[016]\n"
+                  - "respawn\n"
+                  - "\n"
+                  - "pre-start script\n"
+                  - "   docker ps -aq -f name=consul-client | xargs -r docker rm\n"
+                  - "end script\n"
+                  - "\n"
+                  - "script\n"
+                  - '    AWS_ENV='
+                  - !Ref 'Network'
+                  - "\n"
+                  - '    CONSUL_VERSION='
+                  - !Ref 'ConsulVersion'
+                  - "\n"
+                  - "\n"
+                  - "    if [ -z $AWS_ENV ]\n"
+                  - "    then\n"
+                  - "        echo \"Environment not given\"\n"
+                  - "        exit 1\n"
+                  - "    fi\n"
+                  - "\n"
+                  - "    if [ -z $CONSUL_VERSION ]\n"
+                  - "    then\n"
+                  - "        echo \"No Consul version given, defaulting to 0.8.1\"\
+                    \n"
+                  - "        CONSUL_VERSION=0.8.1\n"
+                  - "    fi\n"
+                  - "\n"
+                  - '    REGION='
+                  - !Ref 'AWS::Region'
+                  - "\n"
+                  - "\n"
+                  - "    echo \"Getting Consul Servers\"\n"
+                  - "    CONSUL_SERVERS=$(aws ec2 describe-instances \\\n"
+                  - "                     --filters Name=tag:network,Values=$AWS_ENV\
+                    \ Name=tag:role,Values=consul --region $REGION \\\n"
+                  - "                     --query 'Reservations[*].Instances[*].PrivateIpAddress'\
+                    \ --output text)\n"
+                  - "\n"
+                  - "    if [ -z \"$CONSUL_SERVERS\" ]; then\n"
+                  - "        echo No Consul Servers found, this is bad\n"
+                  - "        exit 1\n"
+                  - "    fi\n"
+                  - "\n"
+                  - "    LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)\n"
+                  - "    INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n"
+                  - "\n"
+                  - "    NS=($(grep nameserver /etc/resolv.conf | awk '{ print $2\
+                    \ }'))\n"
+                  - "    for i in ${NS[@]}\n"
+                  - "    do\n"
+                  - "        R=\"-recursor $i\"\n"
+                  - "        RECURSOR=\"$RECURSOR $R\"\n"
+                  - "    done\n"
+                  - "\n"
+                  - "    # Create retry join instances\n"
+                  - "    for i in $CONSUL_SERVERS\n"
+                  - "    do\n"
+                  - "       J=\"-retry-join $i\"\n"
+                  - "       RETRY_JOIN=\"$RETRY_JOIN $J\"\n"
+                  - "    done\n"
+                  - "\n"
+                  - "    echo \"Starting Consul agent...\"\n"
+                  - "    docker run --net=host -e GOMAXPROCS=$(nproc) -e SERVICE_IGNORE=1\
+                    \ -p 8300:8300 \\\n"
+                  - "                  -p 8301:8301 -p 8301:8301/udp -p 8302:8302\
+                    \ -p 8302:8302/udp -p 8400:8400 \\\n"
+                  - "                  -p 8500:8500 -p 53:53/udp  -v /opt/consul/data:/consul/data\
+                    \ \\\n"
+                  - "                  -v /opt/consul/config:/consul/config  -e CONSUL_ALLOW_PRIVILEGED_PORTS=1\
+                    \ --ulimit nofile=1024000\\\n"
+                  - "                  -l service_name=consul-client -v /var/run/docker.sock:/var/run/docker.sock\
+                    \ -h $INSTANCE_ID \\\n"
+                  - '                  --name consul-client '
+                  - !Ref 'ConsulEntRepo'
+                  - ':'
+                  - !Ref 'ConsulVersion'
+                  - " agent -datacenter $REGION \\\n"
+                  - "                  -advertise $LOCAL_IP -client 0.0.0.0 $RECURSOR\
+                    \ $RETRY_JOIN\n"
+                  - "end script\n"
+          commands:
+            01_create_consul_data_dir:
+              command: mkdir -p /opt/consul/data /opt/consul/config
+            02_add_user_to_docker_group:
+              command: usermod -a -G docker ec2-user
+            03_docker_login:
+              command: !Join
+                - ''
+                - - 'eval $(aws ecr get-login --no-include-email --region us-west-2
+                    --registry-ids '
+                  - !FindInMap 
+                    - CommonMapping
+                    - CommonMap
+                    - ECRAccountNumber
+                  - )
+            04_pull_consul_image:
+              command: !Join
+                - ''
+                - - 'docker pull '
+                  - !Ref 'ConsulEntRepo'
+                  - ':'
+                  - !Ref 'ConsulVersion'
+            05_pull_registrator_image:
+              command: !Join
+                - ''
+                - - 'docker pull '
+                  - !Ref 'RegistratorRepo'
+                  - ':'
+                  - !Ref 'RegistratorVersion'
+            06_start_consul:
+              command: start consul
+        Linkerd:
+          files:
+            /etc/linkerd.conf:
+              content: !Join
+                - ''
+                - - "admin:\n"
+                  - "  ip: 0.0.0.0\n"
+                  - "  port: 9990\n"
+                  - "usage:\n"
+                  - "   enabled: false\n"
+                  - "telemetry:\n"
+                  - "- kind: io.zipkin.http\n"
+                  - "  host: localhost:9411\n"
+                  - '  initialSampleRate: '
+                  - !Ref 'TracingSampleRate'
+                  - "\n"
+                  - "- kind: io.l5d.influxdb\n"
+                  - "routers:\n"
+                  - "- protocol: http\n"
+                  - "  label: internal\n"
+                  - "  service:\n"
+                  - "    responseClassifier:\n"
+                  - "      kind: io.l5d.http.retryableIdempotent5XX\n"
+                  - "  servers:\n"
+                  - '  - port: '
+                  - !Ref 'LinkerdInternalPort'
+                  - "\n"
+                  - "    ip: 0.0.0.0\n"
+                  - "  interpreter:\n"
+                  - "    kind: io.l5d.mesh\n"
+                  - "    root: /internal\n"
+                  - "    retry:\n"
+                  - "     baseSeconds: 30\n"
+                  - "     maxSeconds: 60\n"
+                  - "    dst: /$/inet/"
+                  - !ImportValue
+                    Fn::Join:
+                      - ''
+                      - - Namerd-Lb-URL-
+                        - !Ref 'Network'
+                  - "/4321\n"
+                  - "  identifier:\n"
+                  - "    kind: io.l5d.path\n"
+                  - "    consume: true\n"
+                  - "  dstPrefix: /\n"
+                  - "  client:\n"
+                  - "   loadBalancer:\n"
+                  - "     kind: ewma\n"
+                  - "     maxEffort: 5\n"
+                  - "     decayTimeMs: 10\n"
+                  - "   requeueBudget:\n"
+                  - "     percentCanRetry: 0.01\n"
+                  - "- protocol: http\n"
+                  - "  label: internet\n"
+                  - "  service:\n"
+                  - "    responseClassifier:\n"
+                  - "      kind: io.l5d.http.retryableIdempotent5XX\n"
+                  - "  servers:\n"
+                  - '  - port: '
+                  - !Ref 'LinkerdInternetPort'
+                  - "\n"
+                  - "    ip: 0.0.0.0\n"
+                  - "  interpreter:\n"
+                  - "    kind: io.l5d.mesh\n"
+                  - "    root: /internet\n"
+                  - "    retry:\n"
+                  - "     baseSeconds: 30\n"
+                  - "     maxSeconds: 60\n"
+                  - "    dst: /$/inet/"
+                  - !ImportValue
+                    Fn::Join:
+                      - ''
+                      - - Namerd-Lb-URL-
+                        - !Ref 'Network'
+                  - "/4321\n"
+                  - "  identifier:\n"
+                  - "    kind: io.l5d.path\n"
+                  - "    consume: true\n"
+                  - "  dstPrefix: /\n"
+                  - "  client:\n"
+                  - "   loadBalancer:\n"
+                  - "     kind: ewma\n"
+                  - "     maxEffort: 5\n"
+                  - "     decayTimeMs: 10\n"
+                  - "   requeueBudget:\n"
+                  - "     percentCanRetry: 0.01\n"
+                  - "- protocol: http\n"
+                  - "  label: internet-trusted\n"
+                  - "  service:\n"
+                  - "    responseClassifier:\n"
+                  - "      kind: io.l5d.http.retryableIdempotent5XX\n"
+                  - "  servers:\n"
+                  - '  - port: '
+                  - !Ref 'LinkerdInternetTrustedPort'
+                  - "\n"
+                  - "    ip: 0.0.0.0\n"
+                  - "  interpreter:\n"
+                  - "    kind: io.l5d.mesh\n"
+                  - "    root: /internet\n"
+                  - "    retry:\n"
+                  - "     baseSeconds: 30\n"
+                  - "     maxSeconds: 60\n"
+                  - "    dst: /$/inet/"
+                  - !ImportValue
+                    Fn::Join:
+                      - ''
+                      - - Namerd-Lb-URL-
+                        - !Ref 'Network'
+                  - "/4321\n"
+                  - "  identifier:\n"
+                  - "    kind: io.l5d.path\n"
+                  - "    consume: true\n"
+                  - "  dstPrefix: /\n"
+                  - "  client:\n"
+                  - "   loadBalancer:\n"
+                  - "     kind: ewma\n"
+                  - "     maxEffort: 5\n"
+                  - "     decayTimeMs: 10\n"
+                  - "   requeueBudget:\n"
+                  - "     percentCanRetry: 0.01\n"
+                  - "- protocol: http\n"
+                  - "  label: external\n"
+                  - "  service:\n"
+                  - "    responseClassifier:\n"
+                  - "      kind: io.l5d.http.retryableIdempotent5XX\n"
+                  - "  servers:\n"
+                  - '  - port: '
+                  - !Ref 'LinkerdExternalPort'
+                  - "\n"
+                  - "    ip: 0.0.0.0\n"
+                  - "    clearContext: true\n"
+                  - "  interpreter:\n"
+                  - "    kind: io.l5d.mesh\n"
+                  - "    root: /external\n"
+                  - "    retry:\n"
+                  - "     baseSeconds: 30\n"
+                  - "     maxSeconds: 60\n"
+                  - "    dst: /$/inet/"
+                  - !ImportValue
+                    Fn::Join:
+                      - ''
+                      - - Namerd-Lb-URL-
+                        - !Ref 'Network'
+                  - "/4321\n"
+                  - "  identifier:\n"
+                  - "    kind: io.l5d.path\n"
+                  - "    consume: true\n"
+                  - "  dstPrefix: /\n"
+                  - "  client:\n"
+                  - "   loadBalancer:\n"
+                  - "     kind: ewma\n"
+                  - "     maxEffort: 5\n"
+                  - "     decayTimeMs: 10\n"
+                  - "   requeueBudget:\n"
+                  - "     percentCanRetry: 0.01\n"
+            /etc/telegraf/telegraf.exec/linkerd.sh:
+              content: !Join
+                - ''
+                - - "#!/bin/bash\n"
+                  - "exec curl -H \"Host: $HOSTNAME\" -s http://localhost:9990/admin/metrics/influxdb\n"
+              mode: '000755'
+            /etc/init/linkerd.conf:
+              content: !Sub
+                - |
+                  description "Starts linkerd on system"
+                  author "Fox DCG"
+                  start on started consul
+                  stop on starting rc RUNLEVEL=[016]
+                  pre-start script
+                     docker ps -aq -f name=^/linkerd$ | xargs -r docker rm
+                  end script
+                  script
+                      docker run --name linkerd -v /etc/linkerd.conf:/etc/linkerd.conf -log.level=ERROR -l SERVICE_9990_NAME=linkerd-admin --net=host -p 4140:4140 -p 9990:9990 -p 4141:4141 -p 4142:4142 -e JVM_HEAP_MIN=${JVM_HEAP} -e JVM_HEAP_MAX=${JVM_HEAP} ${LinkerdZipkinRepo}:${LinkerdZipkinVersion} /etc/linkerd.conf
+                  end script
+                - {
+                    LinkerdZipkinRepo: !Ref LinkerdZipkinRepo,
+                    LinkerdZipkinVersion: !Ref LinkerdZipkinVersion,
+                    JVM_HEAP: !FindInMap [EnvMap, !Ref Network, JVMHEAP]
+                  }
+            /opt/consul/config/linkerd.json:
+              content: !Join
+                - ''
+                - - "{\n"
+                  - "  \"check\": {\n"
+                  - "    \"name\": \"linkerd\",\n"
+                  - "    \"http\": \"http://localhost:9990/admin/ping\",\n"
+                  - "    \"interval\": \"5s\",\n"
+                  - "    \"timeout\": \"3s\",\n"
+                  - '    "token": "'
+                  - !Ref 'ConsulAgentToken'
+                  - "\"\n"
+                  - "  }\n"
+                  - "}\n"
+            /opt/consul/config/linkerd-admin.json:
+              content: !Join
+                - ''
+                - - "{\n"
+                  - "  \"check\": {\n"
+                  - "    \"name\": \"linkerd-admin\",\n"
+                  - "    \"http\": \"http://localhost:4140/linkerd-admin/admin/ping\"\
+                    ,\n"
+                  - "    \"interval\": \"5s\",\n"
+                  - "    \"timeout\": \"3s\",\n"
+                  - "    \"status\": \"passing\",\n"
+                  - '    "token": "'
+                  - !Ref 'ConsulAgentToken'
+                  - "\"\n"
+                  - "  }\n"
+                  - "}\n"
+          commands:
+            01_pull_linkerd_image:
+              command: !Join
+                - ''
+                - - 'docker pull '
+                  - !Ref 'LinkerdZipkinRepo'
+                  - ':'
+                  - !Ref 'LinkerdZipkinVersion'
+            02_start_linkerd:
+              command: start linkerd
+            03_restart_consul:
+              command: docker exec consul-client consul reload
+        Jaeger:
+          files:
+            /etc/init/jaeger-agent.conf:
+              content: !Join
+                - ''
+                - - "description \"Starts up Jaeger on system\"\n"
+                  - "author \"Fox DCG\"\n"
+                  - "stop on starting rc RUNLEVEL=[016]\n"
+                  - "\n"
+                  - "pre-start script\n"
+                  - "    docker ps -aq -f name=jaeger-agent | xargs -r docker rm\n"
+                  - "end script\n"
+                  - "\n"
+                  - "script\n"
+                  - "\n"
+                  - 'docker run -d --rm --name jaeger-agent -l service_name=jaeger-agent
+                    --net=host -p 5775:5775/udp  -p 6831:6831/udp  -p 6832:6832/udp '
+                  - '-p 5778:5778/tcp jaegertracing/jaeger-agent:'
+                  - !Ref 'JaegerAgentVersion'
+                  - ' '
+                  - --reporter.tchannel.host-port=jaeger-collector.
+                  - !Ref 'DnsZone'
+                  - ":14267\n"
+                  - "end script\n"
+          commands:
+            01_pull_jaeger_agent:
+              command: !Join
+                - ''
+                - - 'docker pull jaegertracing/jaeger-agent:'
+                  - !Ref 'JaegerAgentVersion'
+            02_start_jaeger_agent:
+              command: start jaeger-agent
+        Nginx:
+          files:
+            /etc/nginx/nginx.conf:
+              content: !Join
+                - ''
+                - - "user  nginx;\n"
+                  - "worker_processes  1;\n"
+                  - "\n"
+                  - "error_log  /nginx/logs/error.log debug;\n"
+                  - "pid        /nginx/logs/nginx.pid;\n"
+                  - "\n"
+                  - "\n"
+                  - "events {\n"
+                  - "    worker_connections  1024;\n"
+                  - "}\n"
+                  - "\n"
+                  - "\n"
+                  - "http {\n"
+                  - "    include       /nginx/conf/mime.types;\n"
+                  - "    default_type  application/octet-stream;\n"
+                  - "    log_format main 'time=\"$time_local\" uriPath=$request_uri\
+                    \ status=$status bytesOut=$bytes_sent '\n"
+                  - "                     'upRespTime=$upstream_response_time reqTime=$request_time\
+                    \ api_id=$http_x_amzn_apigateway_api_id '\n"
+                  - "                     'amzn_trace_id=$http_x_amzn_trace_id api_key=$apikeyheader\
+                    \ ';\n"
+                  - "\n"
+                  - "    access_log  /nginx/logs/access.log  main;\n"
+                  - "\n"
+                  - "    client_max_body_size 100M;\n"
+                  - "    sendfile        on;\n"
+                  - "    keepalive_timeout  65;\n"
+                  - "\n"
+                  - "    gzip on;\n"
+                  - "    gzip_min_length 1200;\n"
+                  - "    gzip_proxied any;\n"
+                  - "    gzip_buffers 48 8k;\n"
+                  - "    gzip_vary on;\n"
+                  - "    gzip_types  image/svg+xml text/plain text/xml text/css application/javascript\
+                    \ text/json application/json\n"
+                  - "                    application/x-font-ttf text/javascript;\n"
+                  - "\n"
+                  - "    server {\n"
+                  - '        listen '
+                  - !Ref 'NlbInternetPort'
+                  - ";\n"
+                  - "\n"
+                  - "        set $apikeyheader $http_x_api_key;\n"
+                  - "        if ($http_apikey) {\n"
+                  - "           set $apikeyheader $http_apikey;\n"
+                  - "        }\n"
+                  - "\n"
+                  - "        location /server-status {\n"
+                  - "            stub_status on;\n"
+                  - "            allow 127.0.0.1;\n"
+                  - "        }\n"
+                  - "\n"
+                  - "        location /admin/ping {\n"
+                  - "            proxy_pass http://localhost:9990/admin/ping;\n"
+                  - "        }\n"
+                  - "\n"
+                  - "        location / {\n"
+                  - '            if ($http_x_api_gateway_proof != "'
+                  - !Ref 'ApiGatewayHeaderValue'
+                  - "\") {\n"
+                  - "                return 403;\n"
+                  - "            }\n"
+                  - '            proxy_pass http://localhost:'
+                  - !Ref 'LinkerdInternetPort'
+                  - "/;\n"
+                  - "            proxy_buffering on;\n"
+                  - "            proxy_buffers 160 8k;\n"
+                  - "            proxy_buffer_size 4k;\n"
+                  - "        }\n"
+                  - "    }\n"
+                  - "}\n"
+                  - "\n"
+            /etc/init/nginx.conf:
+              content: !Join
+                - ''
+                - - "description \"Starts nginx on system\"\n"
+                  - "author \"Fox DCG\"\n"
+                  - "start on started linkerd\n"
+                  - "stop on starting rc RUNLEVEL=[016]\n"
+                  - "\n"
+                  - "pre-start script\n"
+                  - "   docker ps -aq -f name=^/nginx | xargs -r docker rm\n"
+                  - "end script\n"
+                  - "\n"
+                  - "script\n"
+                  - '   docker run --name nginx -v /etc/nginx/nginx.conf:/nginx/conf/nginx.conf
+                    -l SERVICE_'
+                  - !Ref 'NlbInternetPort'
+                  - _NAME=nginx-internet
+                  - '   --net=host -p '
+                  - !Ref 'NlbInternetPort'
+                  - ':'
+                  - !Ref 'NlbInternetPort'
+                  - ' '
+                  - !Ref 'NginxLuaRepo'
+                  - ':'
+                  - !Ref 'NginxLuaImageVersion'
+                  - "\n"
+                  - "end script\n"
+            /etc/telegraf/telegraf.d/nginx.conf:
+              content: !Join
+                - ''
+                - - "[[inputs.nginx]]\n"
+                  - "\n"
+                  - 'urls = ["http://localhost:'
+                  - !Ref 'NlbInternetPort'
+                  - "/server-status\"]\n"
+          commands:
+            01_pull_nginx_image:
+              command: docker pull nginx
+            02_start_nginx:
+              command: start nginx
+            03_restart_telegraf:
+              command: restart telegraf
+    Properties:
+      KeyName: !Ref 'KeyName'
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvdcz
+          Ebs:
+            VolumeSize: !FindInMap 
+                    - CommonMapping
+                    - CommonMap
+                    - VolumeSize
+            VolumeType: !FindInMap 
+                    - CommonMapping
+                    - CommonMap
+                    - VolumeType
+      ImageId: !FindInMap
+        - EcsNodeAmiMap
+        - !Ref 'AWS::Region'
+        - AmiId
+      IamInstanceProfile: !Ref 'EcsInstanceProfile'
+      InstanceType: !Ref 'InstanceType'
+      InstanceMonitoring: !If
+        - DetailedMonitoring
+        - 'true'
+        - 'false'
+      UserData: !Base64
+        Fn::Join:
+          - ''
+          - - "#!/bin/bash -x\n"
+            - ''
+            - 'echo "license_key: '
+            - !Ref NewReliclicenseKey
+            - |
+              " | sudo tee -a /etc/newrelic-infra.yml
+            - 'echo "display_name: '
+            - !Join 
+              - '-'
+              - - ECS
+                - !Ref Network
+                - !Ref ClusterName
+            - |
+              " | sudo tee -a /etc/newrelic-infra.yml
+            - |
+              echo "custom_attributes: 
+            - ' environment: '
+            - !Ref Network
+            - |
+              " | sudo tee -a /etc/newrelic-infra.yml
+            - >
+              curl -o /etc/yum.repos.d/newrelic-infra.repo
+              https://download.newrelic.com/infrastructure_agent/linux/yum/el/6/x86_64/newrelic-infra.repo
+            - >
+              yum -q makecache -y --disablerepo='*'
+              --enablerepo='newrelic-infra'
+            - |
+              yum install newrelic-infra -y
+            - |          
+            - "yum install -y aws-cfn-bootstrap aws-cli\n"
+            - "# Install the files and packages from the metadata\n"
+            - "# reduce the minimum timeout for all routes\n"
+            - "ip route | grep -v rto_min | grep -v linkdown | while read line; do\
+              \ ip route change $line rto_min 10ms initcwnd 16 initrwnd 16; done\n"
+            - '/opt/aws/bin/cfn-init -v '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource EcsLc '
+            - '         --configsets '
+            - !If
+              - CreateLB
+              - InstallWithNginx
+              - InstallWithOutNginx
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - "\n"
+            - "RESULT=$?\n"
+            - "if [ $RESULT -ne 0 ];\n"
+            - "then \n"
+            - "  INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n"
+            - "  aws autoscaling set-instance-health --instance-id $INSTANCE_ID --region "
+            - !Ref 'AWS::Region'
+            - " --health-status Unhealthy \n"
+            - "  exit 1\n"
+            - "fi\n"
+            - "# reduce the minimum timeout for all routes...Again (in case new things\
+              \ are up now)\n"
+            - "while `ip route | grep -q linkdown`; do sleep 1; done\n"
+            - "ip route | grep -v rto_min | while read line; do ip route change $line\
+              \ rto_min 10ms initcwnd 16 initrwnd 16; done\n"
+            - "# Signal the status from cfn-init\n"
+            - '/opt/aws/bin/cfn-signal -e $RESULT '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource EcsAsg '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - "\n"
+      SecurityGroups:
+        - !GetAtt 'NetworkInfo.SecurityGroupId'
+        - !If
+          - CreateLB
+          - !Ref 'LinkerdAlbSecurityGroup'
+          - !Ref 'AWS::NoValue'
+  LinkerdLoadBalancerDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateLB
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt 'LinkerdAlb.DNSName'
+        HostedZoneId: !GetAtt 'LinkerdAlb.CanonicalHostedZoneID'
+      HostedZoneName: !Ref HostedZoneForLinkerdLB
+      Name: !Join 
+        - .
+        - - !Ref 'AWS::Region'
+          - internal
+          - !Ref HostedZoneForLinkerdLB
+      Type: A
+      Weight: 1
+      SetIdentifier: !GetAtt 'LinkerdAlb.DNSName'
+  AsgTerminateHook:
+    Type: AWS::AutoScaling::LifecycleHook
+    Properties:
+      AutoScalingGroupName: !Ref 'EcsAsg'
+      LifecycleTransition: autoscaling:EC2_INSTANCE_TERMINATING
+      HeartbeatTimeout: '300'
+      DefaultResult: CONTINUE
+      NotificationTargetARN: !ImportValue 'EcsAsgNotificationArn'
+      RoleARN: !ImportValue 'EcsAsgPublishSnsRoleArn'
+  ScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: PercentChangeInCapacity
+      AutoScalingGroupName: !Ref 'EcsAsg'
+      Cooldown: !Ref 'ScalingCooldown'
+      MinAdjustmentMagnitude: !Ref 'MinScaleOut'
+      ScalingAdjustment: !Ref 'PercentageScaleOut'
+      PolicyType: SimpleScaling
+  MemoryReservationHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: !Ref 'MemoryReservationHigh'
+      AlarmDescription: If the memory reservation is over this for the cluster fire
+        off an alarm
+      Period: '60'
+      AlarmActions:
+        - !Ref 'ScaleUpPolicy'
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: MemoryReservation
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: GreaterThanThreshold
+  MemoryReservationLowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '10'
+      Statistic: Average
+      Threshold: !Ref 'MemoryReservationLow'
+      AlarmDescription: If the memory reservation is under this for the cluster fire
+        off an alarm
+      Period: '60'
+      AlarmActions:
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: MemoryReservation
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: LessThanThreshold
+  MemoryUtilizationHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: !Ref 'MemoryUtilizationHigh'
+      AlarmDescription: If the memory reservation is over this % for the cluster fire
+        off an alarm
+      Period: '60'
+      AlarmActions:
+        - !Ref 'ScaleUpPolicy'
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: MemoryUtilization
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: GreaterThanThreshold
+  MemoryUtilizationLowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '10'
+      Statistic: Average
+      Threshold: !Ref 'MemoryUtilizationLow'
+      AlarmDescription: If the memory reservation is under this % for the cluster
+        fire off an alarm
+      Period: '60'
+      AlarmActions:
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: MemoryUtilization
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: LessThanThreshold
+  CpuUtilizationHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: !Ref 'CPUUtilizationHigh'
+      AlarmDescription: If the utilization on the servers is high, we should fire
+        off an alarm
+      Period: '60'
+      AlarmActions:
+        - !Ref 'ScaleUpPolicy'
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref 'EcsAsg'
+      ComparisonOperator: GreaterThanThreshold
+  CpuUtilizationLowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '10'
+      Statistic: Average
+      Threshold: !Ref 'CPUUtilizationLow'
+      AlarmDescription: If the utilization on the servers is low, we should fire off
+        an alarm
+      Period: '60'
+      AlarmActions:
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref 'EcsAsg'
+      ComparisonOperator: LessThanThreshold
+  CpuReservationHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: !Ref 'CPUReservationHigh'
+      AlarmDescription: If the CPU reservation on the servers is high, we should fire
+        off an alarm
+      Period: '60'
+      AlarmActions:
+        - !Ref 'ScaleUpPolicy'
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: CPUReservation
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: GreaterThanThreshold
+  CpuReservationLowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '10'
+      Statistic: Average
+      Threshold: !Ref 'CPUReservationLow'
+      AlarmDescription: If the CPU reservation on the servers is low, we should fire
+        off an alarm
+      Period: '60'
+      AlarmActions:
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: CPUReservation
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: LessThanThreshold
+  ScaleInPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: PercentChangeInCapacity
+      MinAdjustmentMagnitude: '1'
+      AutoScalingGroupName: !Ref 'EcsAsg'
+      Cooldown: !Ref 'ScalingCooldown'
+      ScalingAdjustment: '-2'
+      PolicyType: SimpleScaling
+  EmptyInstanceAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: !Ref 'EmptyInstanceThreshold'
+      AlarmDescription: If the empty instance count is over this value the cluster
+        will scale in.
+      Period: '60'
+      AlarmActions:
+        - !If
+          - EnableEmptyInstanceScaleIn
+          - !Ref 'ScaleInPolicy'
+          - !Ref 'AWS::NoValue'
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: EmptyInstances
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: GreaterThanThreshold
+  SchedulableContainersHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: !Ref 'SchedulableContainersThreshold'
+      AlarmDescription: If number of schedulable container is over this value the
+        cluster will scale in.
+      Period: '60'
+      AlarmActions:
+        - !If
+          - EnableSchedulableContainersScaleIn
+          - !Ref 'ScaleInPolicy'
+          - !Ref 'AWS::NoValue'
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: SchedulableContainers
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: GreaterThanThreshold
+  CombinedUtilResLowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: '4'
+      AlarmDescription: If combinedUtilResLow is equal to 4 then this alarm will trigger.
+      Period: '60'
+      AlarmActions:
+        - !If
+          - EnableCombinedUtilResLow
+          - !Ref 'ScaleInPolicy'
+          - !Ref 'AWS::NoValue'
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: CombinedUtilResLow
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+  RunningTaskCountLowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: '1'
+      AlarmDescription: If RunningTaskCount is lower than 1 then this alarm will trigger.
+      Period: '60'
+      AlarmActions:
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: RunningTaskCount
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: LessThanThreshold
+  DesiredTaskCountLowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: '1'
+      AlarmDescription: If DesiredTaskCount is lower than 1 then this alarm will trigger.
+      Period: '60'
+      AlarmActions:
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: DesiredTaskCount
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: LessThanThreshold
+  PendingTaskCountHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: '1'
+      AlarmDescription: If PendingTaskCount is equal to or higher than 1 then this
+        alarm will trigger.
+      Period: '60'
+      AlarmActions:
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: PendingTaskCount
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+  ServicesNotActiveHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: '1'
+      AlarmDescription: If ServicesNotActive is equal to or higher than 1 then this
+        alarm will trigger.
+      Period: '60'
+      AlarmActions:
+        - !If
+          - ScalingAlarmNotifications
+          - !Ref 'ECSMetricsAlarmTopic'
+          - !Ref 'AWS::NoValue'
+      Namespace: AWS/ECS
+      MetricName: ServicesNotActive
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref 'EcsCluster'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+  ClusterDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Join
+        - '-'
+        - - ECS
+          - !Ref 'Network'
+          - !Ref 'ClusterName'
+          - AutoScaling
+      DashboardBody: !Join
+        - ''
+        - - ''
+          - '{"widgets":['
+          - '{"type":"metric","x":0,"y":0,"width":12,"height":6,"properties":{"metrics":[["AWS/AutoScaling","GroupTotalInstances","AutoScalingGroupName","'
+          - !Ref 'EcsAsg'
+          - '"],[ ".", "GroupDesiredCapacity", ".", "." ],[ ".", "GroupInServiceInstances",
+            ".", "." ]],"period":300,"stat":"Minimum","region":"'
+          - !Ref 'AWS::Region'
+          - '","title":"AutoScaling Instances"}},'
+          - '{"type":"metric","x":12,"y":0,"width":6,"height":6,"properties":{"metrics":[["AWS/AutoScaling","GroupInServiceInstances","AutoScalingGroupName","'
+          - !Ref 'EcsAsg'
+          - '"]],"period":300,"stat":"Minimum","view":"singleValue","region":"'
+          - !Ref 'AWS::Region'
+          - '","title":"AutoScaling In Service"}},'
+          - '{"type":"text","x":18,"y":0,"width":6,"height":6,"properties":{'
+          - '"markdown":"\n## Cloudformation Stack\n'
+          - '[button:primary:'
+          - !Ref 'AWS::StackName'
+          - '](https://'
+          - !Ref 'AWS::Region'
+          - .console.aws.amazon.com/cloudformation/home?region=
+          - !Ref 'AWS::Region'
+          - '#/stacks?filter=active&stackId='
+          - !Ref 'AWS::StackId'
+          - )\n
+          - \n## ECS Cluster\n
+          - '[button:primary:'
+          - !Ref 'EcsCluster'
+          - '](https://'
+          - !Ref 'AWS::Region'
+          - .console.aws.amazon.com/ecs/home?region=
+          - !Ref 'AWS::Region'
+          - '#/clusters/'
+          - !Ref 'EcsCluster'
+          - /services)\n
+          - \n## AutoScaling Group\n
+          - '[button:primary:'
+          - !Ref 'AWS::StackName'
+          - -EcsAsg](https://
+          - !Ref 'AWS::Region'
+          - .console.aws.amazon.com/ec2/autoscaling/home?region=
+          - !Ref 'AWS::Region'
+          - '#AutoScalingGroups:id='
+          - !Ref 'EcsAsg'
+          - ;view=details)\n
+          - '"}},'
+          - '{"type":"metric","x":0,"y":6,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'RunningTaskCountLowAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"RunningTaskCountLow"}},'
+          - '{"type":"metric","x":12,"y":6,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'DesiredTaskCountLowAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"DesiredTaskCountLow"}},'
+          - '{"type":"metric","x":0,"y":12,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'PendingTaskCountHighAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"PendingTaskCountHigh"}},'
+          - '{"type":"metric","x":12,"y":12,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'ServicesNotActiveHighAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"ServicesNotActiveHigh"}},'
+          - '{"type":"text","x":0,"y":18,"width":24,"height":4,"properties":{'
+          - '"markdown":"\n# Scale Out Alarms\n * CpuReservationHigh \n * CpuUtilizationHigh
+            \n * MemoryReservationHigh \n * MemoryUtilizationHigh \n'
+          - \n### Any one of these alarms can trigger the cluster to scale out.\n"}},
+          - '{"type":"metric","x":0,"y":22,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'CpuReservationHighAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"CpuReservationHigh"}},'
+          - '{"type":"metric","x":12,"y":22,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'CpuUtilizationHighAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"CpuUtilizationHigh"}},'
+          - '{"type":"metric","x":0,"y":28,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'MemoryReservationHighAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"MemoryReservationHigh"}},'
+          - '{"type":"metric","x":12,"y":28,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'MemoryUtilizationHighAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"MemoryUtilizationHigh"}},'
+          - '{"type":"text","x":0,"y":34,"width":24,"height":4,"properties":{'
+          - '"markdown":"\n# Scale In Alarms\n * CombinedUtilResLow Alarm \n * SchedulableContainers
+            Alarm \n * EmptyInstance Alarm\n'
+          - \n### CombinedUtilResLow Alarm\nCombinedUtilResLow Alarm is triggered
+            by 4 alarms for low Cpu & Memory Reservation & Utilization.
+          - CombinedUtilResLow metric is created by checking the status of the four
+            low alarms and is triggered when all are in alarm state.\n\n\n
+          - '"}},'
+          - '{"type":"metric","x":6,"y":38,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'CombinedUtilResLowAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"CombinedUtilResLow"}},'
+          - '{"type":"metric","x":0,"y":44,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'CpuReservationLowAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"CpuReservationLow"}},'
+          - '{"type":"metric","x":12,"y":44,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'CpuUtilizationLowAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"CpuUtilizationLow"}},'
+          - '{"type":"metric","x":0,"y":50,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'MemoryReservationLowAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"MemoryReservationLow"}},'
+          - '{"type":"metric","x":12,"y":50,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'MemoryUtilizationLowAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"MemoryUtilizationLow"}},'
+          - '{"type":"text","x":0,"y":56,"width":24,"height":2,"properties":{'
+          - '"markdown":"\n## SchedulableContainers & EmptyInstance\nSchedulable Containers
+            is configured in cft where this metric is the number of largest defined
+            tasks that can be'
+          - ' run on the cluster. \n EmptyInstance metric is the number of instances
+            in the cluster that are running 0 tasks.\n'
+          - '"}},'
+          - '{"type":"metric","x":0,"y":58,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'SchedulableContainersHighAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"SchedulableContainers"}},'
+          - '{"type":"metric","x":12,"y":58,"width":12,"height":6,"properties":{"annotations":{"alarms":["'
+          - !GetAtt 'EmptyInstanceAlarm.Arn'
+          - '"]},"view":"timeSeries","stacked":true,"title":"EmptyInstance"}},'
+          - '{"type":"text","x":0,"y":64,"width":24,"height":2,"properties":{'
+          - '"markdown":"\n# Support Lambda Function Errors\n"}},'
+          - '{"type":"metric","x":0,"y":66,"width":12,"height":6,"properties":{"metrics":[['
+          - '"AWS/Lambda","Errors","FunctionName","'
+          - !Ref 'EcsEventsNotifierLambda'
+          - '"],'
+          - '[ "...", "'
+          - !Ref 'EcsMetricsNotifierLambda'
+          - '"],'
+          - '[ "...", "'
+          - !Ref 'EcsCustomMetricLambda'
+          - '"],'
+          - '[ "...", "'
+          - !Ref 'EcsTaskMetricLambda'
+          - '"],'
+          - '[ "...", "'
+          - !Ref 'EcsCombinedUtilResMetricLambda'
+          - '"]],'
+          - '"period":300,"stat":"Maximum","region":"'
+          - !Ref 'AWS::Region'
+          - '","title":"Custom Metrics Lambda Function Errors"}}'
+          - ']}'
+Outputs:
+  EcsDashboard:
+    Description: Url to Ecs Cluster Dashboard
+    Value: !Join
+      - ''
+      - - https://
+        - !Ref 'AWS::Region'
+        - .console.aws.amazon.com/cloudwatch/home?region=
+        - !Ref 'AWS::Region'
+        - '#dashboards:name='
+        - !Ref 'ClusterDashboard'
+
+   
